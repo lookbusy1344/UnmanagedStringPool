@@ -25,6 +25,21 @@ Traditional .NET strings are immutable objects on the managed heap. In high-thro
 - Large strings promote to Gen 2, causing expensive full GCs
 - Memory fragmentation from many small string objects
 
+### Design Rationale
+
+- **Finalizers** are needed to ensure unmanaged memory cleanup, but structs don't support them. We need a class.
+- A class-per-string would create significant GC load (even if the strings were stored in unmanaged memory), so instead the
+  finalizable class represents a 'pool', which can hold several strings and performs just one unmanaged memory allocation.
+- Instances of individual pooled strings are **structs**, pointing into a pool object. They have full **copy semantics** and don't involve any
+  heap allocation.
+
+- The pool implements **IDisposable**, with a finalizer, for memory safety.
+- Invalid pointers are never dereferenced. If the pool is disposed, any string structs relying on it automatically become invalid.
+- The pool is deterministically freed, but the tiny pool object itself gets GC's normally (about 100 bytes)
+- If the string within the pool is freed, the `allocation_id` is not reused so any string structs pointing to it become invalid. Reusing
+  the memory in the pool will result in a different id, preventing old string structs pointing to the new string.
+- Freed space in the pool is reused where possible, and periodically compacted
+
 ### Architecture Benefits
 
 1. **Single Memory Block**: One large allocation instead of thousands of small ones reduces OS memory management overhead
@@ -102,8 +117,7 @@ dotnet test --logger:"console;verbosity=detailed"
 ## Requirements
 
 - .NET 9.0 or later
-- Platform with support for unmanaged memory allocation
 
 ## License
 
-[Your License Here]
+MIT
