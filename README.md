@@ -15,7 +15,7 @@ A high-performance .NET library for managing strings in unmanaged memory to redu
 - **Memory Efficient**: 8-byte alignment, free block coalescing, size-indexed allocation
 - **Safe Design**: Allocation IDs prevent use-after-free bugs
 
-## Design Rationale
+## Design
 
 ### Why Unmanaged Memory?
 
@@ -25,7 +25,7 @@ Traditional .NET strings are immutable objects on the managed heap. In high-thro
 - Large strings promote to Gen 2, causing expensive full GCs
 - Memory fragmentation from many small string objects
 
-### Design Rationale
+### Rationale
 
 - **Finalizers** are needed to ensure unmanaged memory cleanup, but structs don't support them. We need a class.
 - A class-per-string would create significant GC load (even if the strings were stored in unmanaged memory), so instead the
@@ -40,7 +40,7 @@ Traditional .NET strings are immutable objects on the managed heap. In high-thro
   the memory in the pool will result in a different id, preventing old string structs pointing to the new string.
 - Freed space in the pool is reused where possible, and periodically compacted
 
-### Architecture Benefits
+### Architecture details
 
 1. **Single Memory Block**: One large allocation instead of thousands of small ones reduces OS memory management overhead
 
