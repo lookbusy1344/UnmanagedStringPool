@@ -76,8 +76,8 @@ using var pool = new UnmanagedStringPool(1024 * 1024);
 PooledString str1 = pool.AllocateString("Hello, World!");
 PooledString str2 = pool.AllocateString("Unmanaged strings!");
 
-// Use like normal strings
-Console.WriteLine(str1.ToString());
+// Use spans directly to avoid heap allocations
+Console.Out.WriteLine(str1.AsSpan());  // Console.Out.WriteLine accepts ReadOnlySpan<char>
 int length = str2.Length;
 char firstChar = str2[0];
 
