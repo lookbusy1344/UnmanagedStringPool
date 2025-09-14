@@ -208,6 +208,38 @@ public class UnmanagedStringPool : IDisposable
 		}
 	}
 
+	/// <summary>
+	/// Clears all allocated strings from the pool and resets internal data structures.
+	/// The allocation ID counter is NOT reset, ensuring that any existing PooledString instances
+	/// become invalid and cannot be used after this operation.
+	/// </summary>
+	public void Clear()
+	{
+		ObjectDisposedException.ThrowIf(IsDisposed, typeof(UnmanagedStringPool));
+
+		// Clear the allocated memory
+		unsafe {
+			NativeMemory.Clear(basePtr.ToPointer(), (nuint)capacityBytes);
+		}
+
+		// Reset offset to start of pool
+		offsetFromBase = 0;
+
+		// Clear all allocations - this invalidates all existing PooledStrings
+		allocations.Clear();
+
+		// Clear all free blocks
+		freeBlocksBySize.Clear();
+		totalFreeBlocks = 0;
+		totalFreeBytes = 0;
+
+		// Reset fragmentation tracking
+		freeOperationsSinceLastCoalesce = 0;
+
+		// IMPORTANT: Do NOT reset lastAllocationId
+		// This ensures old PooledStrings remain invalid
+	}
+
 	#endregion
 
 	#region Friend API for interaction with PooledString, not for public use
