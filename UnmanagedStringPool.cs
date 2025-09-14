@@ -217,10 +217,12 @@ public class UnmanagedStringPool : IDisposable
 	{
 		ObjectDisposedException.ThrowIf(IsDisposed, typeof(UnmanagedStringPool));
 
-		// Clear the allocated memory
+#if DEBUG
+		// Clear the allocated memory for debugging
 		unsafe {
 			NativeMemory.Clear(basePtr.ToPointer(), (nuint)capacityBytes);
 		}
+#endif
 
 		// Reset offset to start of pool
 		offsetFromBase = 0;
