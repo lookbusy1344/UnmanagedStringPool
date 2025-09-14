@@ -182,7 +182,7 @@ public sealed class PooledStringTests : IDisposable
 
 		Assert.Equal(0, str.IndexOf("Hello"));
 		Assert.Equal(6, str.IndexOf("World"));
-		Assert.Equal(12, str.IndexOf("Hello".AsSpan()));
+		Assert.Equal(0, str.IndexOf("Hello".AsSpan()));
 	}
 
 	[Fact]

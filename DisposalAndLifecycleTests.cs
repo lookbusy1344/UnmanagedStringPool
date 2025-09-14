@@ -370,7 +370,7 @@ public class DisposalAndLifecycleTests
 
 		// Initially valid
 		Assert.Equal("Lifecycle Test", str.ToString());
-		Assert.Equal(13, str.Length);
+		Assert.Equal(14, str.Length);
 		Assert.False(str.IsEmpty);
 
 		// Operations should work

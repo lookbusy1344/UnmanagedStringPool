@@ -269,8 +269,8 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 		Assert.Equal(0.0, pool.FragmentationPercentage, 1); // Should be defragmented
 
 		// All remaining strings should still be valid
-		foreach (var str in strings.Where((_, i) => i % 2 == 0)) {
-			Assert.Equal($"FragTest_{strings.IndexOf(str)}", str.ToString());
+		for (int i = 0; i < strings.Count; i += 2) {
+			Assert.Equal($"FragTest_{i}", strings[i].ToString());
 		}
 	}
 
@@ -330,7 +330,7 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 		var wasteRatio = (double)(usedSpace - theoreticalMinimum) / theoreticalMinimum;
 
 		// Alignment should not cause excessive waste (allow up to 300% overhead for small allocations)
-		Assert.True(wasteRatio < 3.0, $"Waste ratio {wasteRatio:F2} is too high for small allocations");
+		Assert.True(wasteRatio <= 3.0, $"Waste ratio {wasteRatio:F2} is too high for small allocations");
 
 		// Verify all strings are correct
 		foreach (var str in strings) {

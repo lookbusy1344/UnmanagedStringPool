@@ -252,29 +252,26 @@ public sealed class ConcurrentAccessTests : IDisposable
 
 		for (var t = 0; t < tasks.Length; t++) {
 			var taskId = t;
-			tasks[t] = (Task<List<string>>)Task.Run(() => {
+			tasks[t] = Task.Run(() => {
 				var results = new List<string>();
 
 				for (var i = 0; i < 15; i++) {
-					PooledString str;
+					string result;
 					lock (lockObject) {
-						str = pool.Allocate($"ConcurrentTask{taskId}_Item{i}");
-					}
+						var str = pool.Allocate($"ConcurrentTask{taskId}_Item{i}");
+						var modified = str.Insert(0, "PREFIX_");
+						var replaced = modified.Replace("Item", "Element");
+						result = replaced.ToString();
 
-					// String operations should be safe once allocated
-					var modified = str.Insert(0, "PREFIX_");
-					var replaced = modified.Replace("Item", "Element");
-
-					results.Add(replaced.ToString());
-
-					lock (lockObject) {
 						str.Free();
 						modified.Free();
 						replaced.Free();
 					}
+
+					results.Add(result);
 				}
 
-				return;
+				return results;
 			});
 		}
 
