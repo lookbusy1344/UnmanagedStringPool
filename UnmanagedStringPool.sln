@@ -3,9 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.14.36127.28
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnmanagedStringPool", "Tests\UnmanagedStringPool.csproj", "{1BABB60B-9CFA-44A7-AB6A-31BD38B2E73C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StringPoolTest", "Tests\StringPoolTest.csproj", "{1BABB60B-9CFA-44A7-AB6A-31BD38B2E73C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnmanagedStringPoolDemo", "UnmanagedStringPoolDemo\UnmanagedStringPoolDemo.csproj", "{2BB51AB4-1C9A-4509-83C0-05445E3EA212}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StringPoolDemo", "Demo\StringPoolDemo.csproj", "{2BB51AB4-1C9A-4509-83C0-05445E3EA212}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

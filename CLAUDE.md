@@ -28,7 +28,7 @@ dotnet test
 dotnet test --logger:"console;verbosity=detailed"
 
 # Run a specific test class
-dotnet test --filter "FullyQualifiedName~UnmanagedStringPoolTests"
+dotnet test --filter "FullyQualifiedName~StringPoolTest"
 
 # Run a specific test method
 dotnet test --filter "FullyQualifiedName~TestClassName.TestMethodName"
@@ -46,10 +46,10 @@ dotnet build /p:EnforceCodeStyleInBuild=true
 dotnet build --no-incremental
 
 # Format code after making changes
-dotnet format UnmanagedStringPool.csproj
+dotnet format
 ```
 
-**IMPORTANT**: Always run `dotnet format UnmanagedStringPool.csproj` after making any code changes to ensure consistent formatting.
+**IMPORTANT**: Always run `dotnet format` after making any code changes to ensure consistent formatting.
 
 ## Core Architecture
 
