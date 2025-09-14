@@ -105,10 +105,7 @@ public static class StringDemo
 		Console.WriteLine($"Buffer dump: \"{pool.DumpBufferAsString()}\"");
 	}
 
-	private static void WriteLine(PooledString str)
-	{
-		Console.Out.WriteLine(str.AsSpan());
-	}
+	private static void WriteLine(PooledString str) => Console.Out.WriteLine(str.AsSpan());
 
 	private static string RandomString(int length)
 	{
@@ -166,10 +163,7 @@ public class UnmanagedStringPool : IDisposable
 		/// <summary>
 		/// Just to aid debugging, this is an internal struct and not intended for public use
 		/// </summary>
-		public override unsafe string ToString()
-		{
-			return new((char*)Pointer, 0, LengthChars);
-		}
+		public override unsafe string ToString() => new((char*)Pointer, 0, LengthChars);
 	}
 
 	/// <summary>
@@ -613,10 +607,7 @@ public class UnmanagedStringPool : IDisposable
 		}
 	}
 
-	~UnmanagedStringPool()
-	{
-		Dispose(false);
-	}
+	~UnmanagedStringPool() => Dispose(false);
 
 	#endregion
 }
@@ -660,10 +651,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, int Allocat
 	/// <summary>
 	/// Free this string's memory back to the pool. This doesn't mutate the actual PooledString fields, it just updates the underlying pool
 	/// </summary>
-	public readonly void Free()
-	{
-		Pool?.FreeString(AllocationId);
-	}
+	public readonly void Free() => Pool?.FreeString(AllocationId);
 
 	/// <summary>
 	/// Allocate a new PooledString with the given value at the specified position. Old PooledString is unchanged.
@@ -854,7 +842,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, int Allocat
 			}
 		}
 
-		var newSize = span.Length + sizeDiff * occurrences.Count;
+		var newSize = span.Length + (sizeDiff * occurrences.Count);
 		if (newSize < 0 || newSize > int.MaxValue) {
 			throw new ArgumentException("Replacement would result in invalid size");
 		}
@@ -914,15 +902,12 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, int Allocat
 	/// <summary>
 	/// Convert to standard .NET string (allocates managed memory)
 	/// </summary>
-	public readonly override string ToString()
-	{
-		return AsSpan().ToString();
-	}
+	public override readonly string ToString() => AsSpan().ToString();
 
 	/// <summary>
 	/// Hash code based on content
 	/// </summary>
-	public readonly override int GetHashCode()
+	public override readonly int GetHashCode()
 	{
 		if (AllocationId == UnmanagedStringPool.EmptyStringAllocationId) {
 			return 0; // Empty string has a hash code of 0
@@ -990,10 +975,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, int Allocat
 	/// <summary>
 	/// Free the string back to the pool, if it is not empty
 	/// </summary>
-	public void Dispose()
-	{
-		Free();
-	}
+	public void Dispose() => Free();
 }
 
 /// <summary>
