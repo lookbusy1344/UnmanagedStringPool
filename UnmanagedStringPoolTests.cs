@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
-public class UnmanagedStringPoolTests : IDisposable
+public sealed class UnmanagedStringPoolTests : IDisposable
 {
 	private readonly UnmanagedStringPool pool;
 
@@ -17,6 +17,7 @@ public class UnmanagedStringPoolTests : IDisposable
 	public void Dispose()
 	{
 		pool?.Dispose();
+		GC.SuppressFinalize(this);
 	}
 
 	#region Construction Tests

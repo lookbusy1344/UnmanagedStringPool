@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
-public class FragmentationAndMemoryTests : IDisposable
+public sealed class FragmentationAndMemoryTests : IDisposable
 {
 	private readonly UnmanagedStringPool pool;
 
@@ -17,6 +17,7 @@ public class FragmentationAndMemoryTests : IDisposable
 	public void Dispose()
 	{
 		pool?.Dispose();
+		GC.SuppressFinalize(this);
 	}
 
 	#region Fragmentation Creation and Detection

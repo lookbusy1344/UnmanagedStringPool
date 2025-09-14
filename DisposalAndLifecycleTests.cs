@@ -340,11 +340,13 @@ public class DisposalAndLifecycleTests
 	{
 		// This test is hard to verify directly due to GC timing
 		// We can at least ensure the finalizer exists and doesn't crash
+#pragma warning disable CA2000 // Intentionally not disposing to test finalizer
 		var pool = new UnmanagedStringPool(1024);
 		var str = pool.Allocate("Test");
 
 		// Don't call Dispose to test finalizer path
 		pool = null;
+#pragma warning restore CA2000
 		str = default;
 
 		// Force GC to potentially run finalizer

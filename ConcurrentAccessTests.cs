@@ -8,13 +8,17 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
-public class ConcurrentAccessTests : IDisposable
+public sealed class ConcurrentAccessTests : IDisposable
 {
 	private readonly UnmanagedStringPool pool;
 
 	public ConcurrentAccessTests() => pool = new(8192);
 
-	public void Dispose() => pool?.Dispose();
+	public void Dispose()
+	{
+		pool?.Dispose();
+		GC.SuppressFinalize(this);
+	}
 
 	#region Thread Safety Documentation Tests
 
@@ -347,7 +351,7 @@ public class ConcurrentAccessTests : IDisposable
 	[Fact]
 	public async Task ConcurrentAccess_DuringDisposal_HandlesGracefullyAsync()
 	{
-		var testPool = new UnmanagedStringPool(2048);
+		using var testPool = new UnmanagedStringPool(2048);
 		var str1 = testPool.Allocate("Test String 1");
 		var str2 = testPool.Allocate("Test String 2");
 

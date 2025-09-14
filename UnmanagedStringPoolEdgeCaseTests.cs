@@ -316,7 +316,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 	{
 		using var pool = new UnmanagedStringPool(1024);
 		var str = pool.Allocate("Test");
-		var nullPoolStr = new PooledString(null, 1);
+		var nullPoolStr = new PooledString(null!, 1);
 
 		Assert.False(str.Equals(nullPoolStr));
 		Assert.False(nullPoolStr.Equals(str));

@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using Xunit;
 
-public class PooledStringTests : IDisposable
+public sealed class PooledStringTests : IDisposable
 {
 	private readonly UnmanagedStringPool pool;
 
@@ -16,6 +16,7 @@ public class PooledStringTests : IDisposable
 	public void Dispose()
 	{
 		pool?.Dispose();
+		GC.SuppressFinalize(this);
 	}
 
 	#region String Operations Tests
