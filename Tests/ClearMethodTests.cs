@@ -1,4 +1,4 @@
-namespace LookBusy.Tests;
+namespace LookBusy.Test;
 
 using System;
 using System.Linq;
@@ -10,10 +10,7 @@ public sealed class ClearMethodTests : IDisposable
 {
 	private readonly UnmanagedStringPool pool;
 
-	public ClearMethodTests()
-	{
-		pool = new UnmanagedStringPool(1024);
-	}
+	public ClearMethodTests() => pool = new(1024);
 
 	public void Dispose()
 	{
