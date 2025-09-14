@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## AI Assistant Guidelines
+
+See `.github/copilot-instructions.md` for general AI assistant guidelines. Key points for Claude Code:
+- Target responses at senior engineer level (15+ years experience)
+- Keep responses concise with minimal code sections
+- Use modern coding styles and functional programming idioms
+- Avoid unnecessary apologies or excitement
+- Generate brief, single-sentence commit messages
+
 ## Project Overview
 
 This is a .NET 9.0 test project implementing an unmanaged string pool to reduce GC load. The `UnmanagedStringPool` class allocates a single block of unmanaged memory and provides string allocations as `PooledString` structs that point into the pool.
