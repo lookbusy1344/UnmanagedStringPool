@@ -42,7 +42,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="UnmanagedStringPoolDemo/**" />
+    <Compile Include="../UnmanagedStringPool.cs" />
+    <Compile Include="../PooledString.cs" />
+    <Compile Remove="../UnmanagedStringPoolDemo/**" />
   </ItemGroup>
 
 </Project>
