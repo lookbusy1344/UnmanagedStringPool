@@ -28,7 +28,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, int Allocat
 	// It also implements IDisposable to call Free() automatically
 
 	// Singleton pool for empty strings to provide consistent behavior
-	private static readonly EmptyStringPool emptyPool = new();
+	private static readonly UnmanagedStringPool emptyPool = new(1, true);
 
 	/// <summary>
 	/// Represents an empty pooled string
