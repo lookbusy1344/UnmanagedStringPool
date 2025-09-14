@@ -10,10 +10,7 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 {
 	private readonly UnmanagedStringPool pool;
 
-	public UnmanagedStringPoolTests()
-	{
-		pool = new UnmanagedStringPool(1024);
-	}
+	public UnmanagedStringPoolTests() => pool = new(1024);
 
 	public void Dispose()
 	{
@@ -39,15 +36,13 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 	[InlineData(0)]
 	[InlineData(-1)]
 	[InlineData(-100)]
-	public void Constructor_InvalidCapacity_ThrowsArgumentOutOfRangeException(int capacity)
-	{
+	public void Constructor_InvalidCapacity_ThrowsArgumentOutOfRangeException(int capacity) =>
 		Assert.Throws<ArgumentOutOfRangeException>(() => new UnmanagedStringPool(capacity));
-	}
 
 	[Fact]
 	public void Constructor_WithGrowthDisabled_SetsAllowGrowthCorrectly()
 	{
-		using var testPool = new UnmanagedStringPool(512, allowGrowth: false);
+		using var testPool = new UnmanagedStringPool(512, false);
 
 		Assert.False(testPool.AllowGrowth);
 	}
@@ -81,7 +76,7 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 	[Fact]
 	public void Allocate_ReadOnlySpan_WorksCorrectly()
 	{
-		ReadOnlySpan<char> span = "Test String".AsSpan();
+		var span = "Test String".AsSpan();
 		var result = pool.Allocate(span);
 
 		Assert.Equal("Test String", result.ToString());
@@ -162,7 +157,7 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 		var str2 = pool.Allocate("Free this");
 		str2.Free();
 
-		var initialCapacity = pool.FreeSpaceChars + pool.ActiveAllocations * "Keep this".Length;
+		var initialCapacity = pool.FreeSpaceChars + (pool.ActiveAllocations * "Keep this".Length);
 
 		pool.DefragmentAndGrowPool(512);
 
@@ -171,15 +166,13 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 	}
 
 	[Fact]
-	public void DefragmentAndGrowPool_NegativeBytes_ThrowsException()
-	{
+	public void DefragmentAndGrowPool_NegativeBytes_ThrowsException() =>
 		Assert.Throws<ArgumentOutOfRangeException>(() => pool.DefragmentAndGrowPool(-100));
-	}
 
 	[Fact]
 	public void AllowGrowth_WhenFalse_ThrowsOnPoolExhaustion()
 	{
-		using var smallPool = new UnmanagedStringPool(10, allowGrowth: false);
+		using var smallPool = new UnmanagedStringPool(10, false);
 
 		// Fill the pool
 		var str1 = smallPool.Allocate("12345");
@@ -191,7 +184,7 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 	[Fact]
 	public void AllowGrowth_WhenTrue_AutomaticallyGrowsPool()
 	{
-		using var smallPool = new UnmanagedStringPool(10, allowGrowth: true);
+		using var smallPool = new UnmanagedStringPool(10, true);
 
 		// Fill the pool
 		var str1 = smallPool.Allocate("12345");
@@ -317,14 +310,14 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 	{
 		var strings = new List<PooledString>();
 
-		for (int i = 0; i < 100; i++) {
+		for (var i = 0; i < 100; i++) {
 			strings.Add(pool.Allocate($"String {i}"));
 		}
 
 		Assert.Equal(100, pool.ActiveAllocations);
 
 		// Verify all strings are correct
-		for (int i = 0; i < 100; i++) {
+		for (var i = 0; i < 100; i++) {
 			Assert.Equal($"String {i}", strings[i].ToString());
 		}
 	}
@@ -345,13 +338,13 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 		var random = new Random(42); // Fixed seed for reproducibility
 		var activeStrings = new List<PooledString>();
 
-		for (int i = 0; i < 200; i++) {
+		for (var i = 0; i < 200; i++) {
 			if (activeStrings.Count == 0 || random.Next(3) == 0) // Allocate
 			{
 				var content = $"String_{i}_{random.Next(1000)}";
 				activeStrings.Add(pool.Allocate(content));
 			} else // Free
-			  {
+			{
 				var index = random.Next(activeStrings.Count);
 				activeStrings[index].Free();
 				activeStrings.RemoveAt(index);

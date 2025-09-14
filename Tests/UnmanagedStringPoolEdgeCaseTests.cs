@@ -31,10 +31,8 @@ public class UnmanagedStringPoolEdgeCaseTests
 	[InlineData(int.MinValue)]
 	[InlineData(-1000000)]
 	[InlineData(0)]
-	public void Constructor_InvalidCapacities_ThrowArgumentOutOfRangeException(int capacity)
-	{
+	public void Constructor_InvalidCapacities_ThrowArgumentOutOfRangeException(int capacity) =>
 		Assert.Throws<ArgumentOutOfRangeException>(() => new UnmanagedStringPool(capacity));
-	}
 
 	#endregion
 
@@ -104,7 +102,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 	{
 		using var pool = new UnmanagedStringPool(1024);
 
-		for (int i = 0; i < 1000; i++) {
+		for (var i = 0; i < 1000; i++) {
 			var empty = pool.Allocate("");
 			Assert.True(empty.IsEmpty);
 		}
@@ -119,7 +117,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 	[Fact]
 	public void Allocate_ExceedsCapacityWithGrowthDisabled_ThrowsOutOfMemoryException()
 	{
-		using var pool = new UnmanagedStringPool(10, allowGrowth: false);
+		using var pool = new UnmanagedStringPool(10, false);
 
 		// Fill most of the pool
 		var str1 = pool.Allocate("12345");
@@ -223,7 +221,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 	[Fact]
 	public void Replace_CausingOverflow_ThrowsArgumentException()
 	{
-		using var pool = new UnmanagedStringPool(1000, allowGrowth: false);
+		using var pool = new UnmanagedStringPool(1000, false);
 		var str = pool.Allocate("ab");
 		var largeReplacement = new string('X', 100_000);
 
@@ -338,7 +336,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 	[Fact]
 	public void FragmentationCalculation_FullPool_ReturnsZero()
 	{
-		using var pool = new UnmanagedStringPool(100, allowGrowth: false);
+		using var pool = new UnmanagedStringPool(100, false);
 
 		try {
 			// Try to fill the pool completely
@@ -361,12 +359,12 @@ public class UnmanagedStringPoolEdgeCaseTests
 		using var pool = new UnmanagedStringPool(1024);
 
 		var strings = new List<PooledString>();
-		for (int i = 0; i < 10; i++) {
+		for (var i = 0; i < 10; i++) {
 			strings.Add(pool.Allocate($"String{i}"));
 		}
 
 		// Free every other string to create fragmentation
-		for (int i = 1; i < strings.Count; i += 2) {
+		for (var i = 1; i < strings.Count; i += 2) {
 			strings[i].Free();
 		}
 
@@ -424,8 +422,8 @@ public class UnmanagedStringPoolEdgeCaseTests
 		using var pool = new UnmanagedStringPool(1024);
 
 		// Allocate strings of various odd sizes
-		var str1 = pool.Allocate("X");     // 1 char
-		var str2 = pool.Allocate("XXX");   // 3 chars  
+		var str1 = pool.Allocate("X"); // 1 char
+		var str2 = pool.Allocate("XXX"); // 3 chars
 		var str3 = pool.Allocate("XXXXX"); // 5 chars
 
 		Assert.Equal("X", str1.ToString());
@@ -467,7 +465,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 	[Fact]
 	public void Replace_IntegerOverflowInCalculation_ThrowsArgumentException()
 	{
-		using var pool = new UnmanagedStringPool(1000, allowGrowth: false);
+		using var pool = new UnmanagedStringPool(1000, false);
 		var str = pool.Allocate("ab");
 
 		// Create a scenario where the replacement will fail due to insufficient space
@@ -524,7 +522,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 
 		Assert.Equal("The First", result1.ToString());
 		Assert.Equal("2nd", result2.ToString());
-		Assert.Equal("First", str1.ToString());  // Original unchanged
+		Assert.Equal("First", str1.ToString()); // Original unchanged
 		Assert.Equal("Second", str2.ToString()); // Original unchanged
 	}
 

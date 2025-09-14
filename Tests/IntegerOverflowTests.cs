@@ -8,10 +8,7 @@ public sealed class IntegerOverflowTests : IDisposable
 {
 	private readonly UnmanagedStringPool pool;
 
-	public IntegerOverflowTests()
-	{
-		pool = new UnmanagedStringPool(1024);
-	}
+	public IntegerOverflowTests() => pool = new(1024);
 
 	public void Dispose()
 	{
@@ -47,7 +44,7 @@ public sealed class IntegerOverflowTests : IDisposable
 	public void Constructor_CapacityByteOverflow_ThrowsOutOfMemoryOrArgumentException()
 	{
 		// When initialCapacityChars * sizeof(char) would overflow int
-		var oversizedCapacity = int.MaxValue / sizeof(char) + 1;
+		var oversizedCapacity = (int.MaxValue / sizeof(char)) + 1;
 
 		Assert.ThrowsAny<Exception>(() => {
 			using var testPool = new UnmanagedStringPool(oversizedCapacity);
@@ -61,11 +58,9 @@ public sealed class IntegerOverflowTests : IDisposable
 	[Theory]
 	[InlineData(int.MaxValue)]
 	[InlineData(int.MaxValue / sizeof(char))]
-	[InlineData((int.MaxValue - 8 + 1) / sizeof(char) + 1)] // Just over the safe limit
-	public void Allocate_OversizedString_ThrowsArgumentOutOfRangeException(int lengthChars)
-	{
+	[InlineData(((int.MaxValue - 8 + 1) / sizeof(char)) + 1)] // Just over the safe limit
+	public void Allocate_OversizedString_ThrowsArgumentOutOfRangeException(int lengthChars) =>
 		Assert.Throws<ArgumentOutOfRangeException>(() => pool.Allocate(lengthChars));
-	}
 
 	[Fact]
 	public void Allocate_MaxSafeLengthString_WorksOrThrowsAppropriately()
@@ -148,10 +143,7 @@ public sealed class IntegerOverflowTests : IDisposable
 	public void AlignSize_NearMaxValues_BehavesConsistently()
 	{
 		// Test values just under the overflow threshold
-		var testValues = new[] {
-			int.MaxValue / 2,
-			int.MaxValue / 4
-		};
+		var testValues = new[] { int.MaxValue / 2, int.MaxValue / 4 };
 
 		foreach (var lengthChars in testValues) {
 			// These should all throw due to memory constraints or overflow detection
@@ -360,17 +352,17 @@ public sealed class IntegerOverflowTests : IDisposable
 		// Fill pool with many allocations to stress binary search in free block management
 		var strings = new PooledString[100];
 
-		for (int i = 0; i < strings.Length; i++) {
+		for (var i = 0; i < strings.Length; i++) {
 			strings[i] = pool.Allocate($"String {i}");
 		}
 
 		// Free every other string to create many free blocks
-		for (int i = 0; i < strings.Length; i += 2) {
+		for (var i = 0; i < strings.Length; i += 2) {
 			strings[i].Free();
 		}
 
 		// Allocate new strings - this will exercise the binary search in FindSuitableFreeBlock
-		for (int i = 0; i < 10; i++) {
+		for (var i = 0; i < 10; i++) {
 			var newStr = pool.Allocate($"New {i}");
 			Assert.Equal($"New {i}", newStr.ToString());
 		}
@@ -406,7 +398,7 @@ public sealed class IntegerOverflowTests : IDisposable
 		// Create a pattern that will trigger coalescing
 		var strings = new PooledString[50];
 
-		for (int i = 0; i < strings.Length; i++) {
+		for (var i = 0; i < strings.Length; i++) {
 			strings[i] = testPool.Allocate($"Coalesce test string number {i} with extra content");
 		}
 

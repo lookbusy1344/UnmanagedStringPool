@@ -9,10 +9,7 @@ public sealed class PooledStringTests : IDisposable
 {
 	private readonly UnmanagedStringPool pool;
 
-	public PooledStringTests()
-	{
-		pool = new UnmanagedStringPool(2048);
-	}
+	public PooledStringTests() => pool = new(2048);
 
 	public void Dispose()
 	{
@@ -473,13 +470,14 @@ public sealed class PooledStringTests : IDisposable
 		var hashes = new HashSet<int>();
 
 		// Generate random strings of varying lengths
-		for (int i = 0; i < stringCount; i++) {
-			int length = random.Next(5, 30);
+		for (var i = 0; i < stringCount; i++) {
+			var length = random.Next(5, 30);
 			var chars = new char[length];
-			for (int j = 0; j < length; j++) {
+			for (var j = 0; j < length; j++) {
 				// Generate random printable ASCII characters
 				chars[j] = (char)random.Next(32, 127);
 			}
+
 			strings.Add(pool.Allocate(new string(chars)));
 		}
 
@@ -490,7 +488,7 @@ public sealed class PooledStringTests : IDisposable
 
 		// Expect at least 80% unique hashes (allowing for some collisions)
 		// With 20 strings and a good hash function, we'd expect 18-20 unique hashes
-		int minUniqueHashes = (int)(stringCount * 0.8);
+		var minUniqueHashes = (int)(stringCount * 0.8);
 		Assert.True(hashes.Count >= minUniqueHashes,
 			$"Expected at least {minUniqueHashes} unique hashes out of {stringCount} strings, but got {hashes.Count}");
 
@@ -512,16 +510,8 @@ public sealed class PooledStringTests : IDisposable
 	{
 		// Test with various string patterns
 		var testStrings = new[] {
-			"",
-			"a",
-			"Hello World",
-			"The quick brown fox jumps over the lazy dog",
-			"12345678901234567890",
-			"Special chars: !@#$%^&*()",
-			"Unicode: 你好世界 🌍",
-			"  spaces  at  various  positions  ",
-			"\t\n\r",
-			new string('x', 100)
+			"", "a", "Hello World", "The quick brown fox jumps over the lazy dog", "12345678901234567890", "Special chars: !@#$%^&*()",
+			"Unicode: 你好世界 🌍", "  spaces  at  various  positions  ", "\t\n\r", new string('x', 100)
 		};
 
 		foreach (var testString in testStrings) {
@@ -545,14 +535,15 @@ public sealed class PooledStringTests : IDisposable
 		var random = new Random(123);
 		const int iterations = 50;
 
-		for (int i = 0; i < iterations; i++) {
+		for (var i = 0; i < iterations; i++) {
 			// Generate a random string
-			int length = random.Next(0, 100);
+			var length = random.Next(0, 100);
 			var chars = new char[length];
-			for (int j = 0; j < length; j++) {
+			for (var j = 0; j < length; j++) {
 				chars[j] = (char)random.Next(32, 127);
 			}
-			string testString = new string(chars);
+
+			var testString = new string(chars);
 
 			// Allocate the same string multiple times
 			var str1 = pool.Allocate(testString);
@@ -571,14 +562,15 @@ public sealed class PooledStringTests : IDisposable
 		using var pool2 = new UnmanagedStringPool(1024);
 		var random = new Random(456);
 
-		for (int i = 0; i < 20; i++) {
+		for (var i = 0; i < 20; i++) {
 			// Generate random string
-			int length = random.Next(5, 50);
+			var length = random.Next(5, 50);
 			var chars = new char[length];
-			for (int j = 0; j < length; j++) {
+			for (var j = 0; j < length; j++) {
 				chars[j] = (char)random.Next(65, 91); // A-Z
 			}
-			string testString = new string(chars);
+
+			var testString = new string(chars);
 
 			// Allocate in different pools
 			var strPool1 = pool.Allocate(testString);

@@ -550,4 +550,3 @@ public class UnmanagedStringPool : IDisposable
 
 	#endregion
 }
-
