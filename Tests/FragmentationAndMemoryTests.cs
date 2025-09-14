@@ -1,8 +1,9 @@
-namespace Playground.Tests;
+namespace LookBusy.Test;
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using LookBusy;
 using Xunit;
 
 public sealed class FragmentationAndMemoryTests : IDisposable

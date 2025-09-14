@@ -1,6 +1,7 @@
-namespace Playground;
+namespace LookBusy.Demo;
 
 using System;
+using LookBusy;
 
 public static class StringDemo
 {

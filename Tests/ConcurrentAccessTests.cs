@@ -1,4 +1,4 @@
-namespace Playground.Tests;
+namespace LookBusy.Test;
 
 using System;
 using System.Collections.Concurrent;
@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using LookBusy;
 using Xunit;
 
 public sealed class ConcurrentAccessTests : IDisposable
