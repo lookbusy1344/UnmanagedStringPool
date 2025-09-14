@@ -35,7 +35,12 @@ dotnet build /p:EnforceCodeStyleInBuild=true
 
 # Check for analyzer warnings/errors
 dotnet build --no-incremental
+
+# Format code after making changes
+dotnet format UnmanagedStringPool.csproj
 ```
+
+**IMPORTANT**: Always run `dotnet format UnmanagedStringPool.csproj` after making any code changes to ensure consistent formatting.
 
 ## Core Architecture
 

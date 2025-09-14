@@ -6,3 +6,4 @@
 copilotDiffState.xml
 copilot.data.migration.agent.xml
 copilot.data.migration.edit.xml
+*.bak
