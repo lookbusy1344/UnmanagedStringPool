@@ -116,6 +116,8 @@ dotnet test
 dotnet test --logger:"console;verbosity=detailed"
 ```
 
+For detailed information about the test suite and coverage areas, see [Tests/README.md](Tests/README.md).
+
 ## Requirements
 
 - .NET 9.0 or later
