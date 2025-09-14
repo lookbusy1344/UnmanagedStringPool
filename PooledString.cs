@@ -316,16 +316,32 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, int Allocat
 	public override readonly int GetHashCode()
 	{
 		if (AllocationId == UnmanagedStringPool.EmptyStringAllocationId) {
-			return 0; // Empty string has a hash code of 0
+			return 0;
 		}
 
 		if (Pool.IsDisposed) {
 			return -1;
 		}
 
+		const int maxChars = 64;
+		const int halfMax = maxChars / 2;
+		var span = AsSpan();
 		var hash = new HashCode();
-		foreach (var c in AsSpan()) {
-			hash.Add(c);
+
+		if (span.Length <= maxChars) {
+			// Hash all characters
+			foreach (var c in span) {
+				hash.Add(c);
+			}
+		} else {
+			// Hash first fragment and last fragment chars
+			foreach (var c in span[..halfMax]) {
+				hash.Add(c);
+			}
+
+			foreach (var c in span[^halfMax..]) {
+				hash.Add(c);
+			}
 		}
 
 		return hash.ToHashCode();
