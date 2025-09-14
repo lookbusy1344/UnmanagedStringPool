@@ -5,7 +5,7 @@ using LookBusy;
 
 public static class StringDemo
 {
-	public static void Run()
+	public static void Main()
 	{
 		using var pool = new UnmanagedStringPool(4096);
 
@@ -82,8 +82,6 @@ public static class StringDemo
 		Console.WriteLine($"Fragmentation: {pool.FragmentationPercentage:F2}%");
 		Console.WriteLine($"Buffer dump: \"{pool.DumpBufferAsString()}\"");
 	}
-
-	public static void Main() => Run();
 
 	private static void WriteLine(PooledString str) => Console.Out.WriteLine(str.AsSpan());
 
