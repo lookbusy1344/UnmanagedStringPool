@@ -82,6 +82,8 @@ public static class StringDemo
 		Console.WriteLine($"Buffer dump: \"{pool.DumpBufferAsString()}\"");
 	}
 
+	public static void Main() => Run();
+
 	private static void WriteLine(PooledString str) => Console.Out.WriteLine(str.AsSpan());
 
 	private static string RandomString(int length)
