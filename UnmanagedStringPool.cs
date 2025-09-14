@@ -25,7 +25,6 @@ using System.Runtime.InteropServices;
 	- Freed space in the pool is reused where possible, and periodically compacted
  */
 
-
 /// <summary>
 /// Represents a pool for allocating unmanaged memory to store strings with automatic growth capability.
 ///
@@ -514,3 +513,33 @@ public class UnmanagedStringPool : IDisposable
 	#endregion
 }
 
+/// <summary>
+/// Special singleton pool that handles empty strings consistently
+/// </summary>
+internal sealed class EmptyStringPool : UnmanagedStringPool
+{
+	public EmptyStringPool() : base(1, true) // Allow growth for empty string operations
+	{
+	}
+
+	internal override AllocationInfo GetAllocationInfo(int id)
+	{
+		if (id == EmptyStringAllocationId) {
+			return new(IntPtr.Zero, 0, 0);
+		}
+
+		// For non-empty allocations, use the base class implementation
+		return base.GetAllocationInfo(id);
+	}
+
+	internal override void FreeString(int id)
+	{
+		if (id == EmptyStringAllocationId) {
+			// Empty strings don't need freeing
+			return;
+		}
+
+		// For non-empty allocations, use the base class implementation
+		base.FreeString(id);
+	}
+}

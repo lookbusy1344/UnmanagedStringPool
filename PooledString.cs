@@ -4,6 +4,20 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
+/*	PooledString is a small immutable struct that represents a string allocated from an UnmanagedStringPool.
+	It holds a reference to the pool and an allocation ID, which together identify the actual string data in unmanaged memory.
+	Because it is a struct, it has value semantics - two PooledStrings with the same content are considered equal, even if they come from different pools.
+
+	PooledString provides methods to read the string as a ReadOnlySpan<char> for efficient access without additional allocations.
+	It also has methods to manipulate the string, such as Insert and Replace, which return new PooledString instances with the modified content.
+	These operations allocate new memory from the pool as needed.
+
+	PooledString implements IDisposable to allow freeing its memory back to the pool when no longer needed.
+	Double-freeing is safe - freeing an already freed PooledString has no effect.
+
+	Think of PooledString as similar to a ReadOnlyMemory<char> that is backed by unmanaged memory from a pool, with additional string manipulation capabilities.
+*/
+
 /// <summary>
 /// Value type representing a string allocated from an unmanaged pool. Just a reference and an allocation ID, 12 bytes total.
 /// </summary>
@@ -368,35 +382,4 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, int Allocat
 	/// Free the string back to the pool, if it is not empty
 	/// </summary>
 	public void Dispose() => Free();
-}
-
-/// <summary>
-/// Special singleton pool that handles empty strings consistently
-/// </summary>
-internal sealed class EmptyStringPool : UnmanagedStringPool
-{
-	public EmptyStringPool() : base(1, true) // Allow growth for empty string operations
-	{
-	}
-
-	internal override AllocationInfo GetAllocationInfo(int id)
-	{
-		if (id == EmptyStringAllocationId) {
-			return new(IntPtr.Zero, 0, 0);
-		}
-
-		// For non-empty allocations, use the base class implementation
-		return base.GetAllocationInfo(id);
-	}
-
-	internal override void FreeString(int id)
-	{
-		if (id == EmptyStringAllocationId) {
-			// Empty strings don't need freeing
-			return;
-		}
-
-		// For non-empty allocations, use the base class implementation
-		base.FreeString(id);
-	}
 }
