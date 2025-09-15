@@ -108,8 +108,28 @@ public class UnmanagedStringPool : IDisposable
 
 	/// <summary>
 	/// Gets the current fragmentation percentage of the pool (0-100)
+	/// Fragmentation measures how scattered the free space is, not just the amount of free space.
+	/// 0% = no fragmentation (contiguous free space), 100% = maximum fragmentation (many tiny scattered blocks)
 	/// </summary>
-	public double FragmentationPercentage => totalFreeBytes * 100.0 / capacityBytes;
+	public double FragmentationPercentage
+	{
+		get
+		{
+			if (totalFreeBytes == 0 || totalFreeBlocks <= 1) {
+				return 0.0; // No fragmentation with 0 or 1 free blocks
+			}
+
+			// Average bytes per block if perfectly defragmented (1 contiguous block)
+			var idealAvgSize = (double)totalFreeBytes;
+
+			// Actual average bytes per block
+			var actualAvgSize = (double)totalFreeBytes / totalFreeBlocks;
+
+			// Fragmentation = how much smaller our blocks are than ideal
+			// This gives 0% for 1 block, 50% for 2 blocks, 66% for 3 blocks, etc.
+			return (1.0 - (actualAvgSize / idealAvgSize)) * 100.0;
+		}
+	}
 
 	/// <summary>
 	/// Gets or sets whether the pool is allowed to grow automatically when needed
