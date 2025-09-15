@@ -111,44 +111,23 @@ public class UnmanagedStringPool : IDisposable
 	/// Fragmentation measures how scattered the free space is, not just the amount of free space.
 	/// 0% = no fragmentation (contiguous free space), 100% = maximum fragmentation (many tiny scattered blocks)
 	/// </summary>
-	public double FragmentationPercentage 
+	public double FragmentationPercentage
 	{
 		get
 		{
-			if (totalFreeBytes == 0 || totalFreeBlocks <= 1)
-			{
+			if (totalFreeBytes == 0 || totalFreeBlocks <= 1) {
 				return 0.0; // No fragmentation with 0 or 1 free blocks
 			}
 
-			// Calculate fragmentation based on how scattered the free blocks are
-			// Use a formula that considers both the number of blocks and their size distribution
-			
-			// Method: Compare actual number of blocks vs ideal (fewer, larger blocks)
-			// If we have N bytes free, ideally we'd have 1 block of size N
-			// Fragmentation increases as we deviate from this ideal
-			
-			// Calculate the average block size
-			var averageBlockSize = (double)totalFreeBytes / totalFreeBlocks;
-			
-			// Calculate the theoretical minimum number of blocks needed for this amount of free space
-			// (This would be 1 if all free space was contiguous)
-			const int idealMinimumBlocks = 1;
-			
-			// Fragmentation is based on how much we exceed the ideal number of blocks
-			// Scale by a factor to get meaningful percentages
-			var excessBlocks = totalFreeBlocks - idealMinimumBlocks;
-			var maxPossibleBlocks = totalFreeBytes / sizeof(char); // Theoretical max: 1 char per block
-			
-			if (maxPossibleBlocks <= idealMinimumBlocks)
-			{
-				return 0.0;
-			}
-			
-			// Calculate fragmentation as percentage of how close we are to maximum possible fragmentation
-			var fragmentationRatio = (double)excessBlocks / (maxPossibleBlocks - idealMinimumBlocks);
-			
-			// Cap at 100% and ensure non-negative
-			return Math.Min(100.0, Math.Max(0.0, fragmentationRatio * 100.0));
+			// Average bytes per block if perfectly defragmented (1 contiguous block)
+			var idealAvgSize = (double)totalFreeBytes;
+
+			// Actual average bytes per block
+			var actualAvgSize = (double)totalFreeBytes / totalFreeBlocks;
+
+			// Fragmentation = how much smaller our blocks are than ideal
+			// This gives 0% for 1 block, 50% for 2 blocks, 66% for 3 blocks, etc.
+			return (1.0 - (actualAvgSize / idealAvgSize)) * 100.0;
 		}
 	}
 
