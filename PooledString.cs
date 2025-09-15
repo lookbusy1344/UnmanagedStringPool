@@ -27,13 +27,10 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, int Allocat
 	// NOTE this struct is technically immutable, but some methods mutate the underlying pool like SetAtPosition() and Free()
 	// It also implements IDisposable to call Free() automatically
 
-	// Singleton pool for empty strings to provide consistent behavior
-	private static readonly UnmanagedStringPool emptyPool = new(1, true);
-
 	/// <summary>
 	/// Represents an empty pooled string
 	/// </summary>
-	public static readonly PooledString Empty = new(emptyPool, UnmanagedStringPool.EmptyStringAllocationId);
+	public static readonly PooledString Empty = new(null!, UnmanagedStringPool.EmptyStringAllocationId);
 
 	#region Public API
 
@@ -64,16 +61,18 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, int Allocat
 	/// </summary>
 	public readonly PooledString Insert(int pos, ReadOnlySpan<char> value)
 	{
-		CheckDisposed();
 		if (value.IsEmpty) {
 			return this;
 		}
 
 		if (AllocationId == UnmanagedStringPool.EmptyStringAllocationId) {
-			return pos == 0
-				? Pool.Allocate(value)
-				: throw new ArgumentOutOfRangeException(nameof(pos), "Cannot insert into an empty string at position other than 0");
+			if (pos != 0) {
+				throw new ArgumentOutOfRangeException(nameof(pos), "Cannot insert into an empty string at position other than 0");
+			}
+			throw new InvalidOperationException("Cannot insert into PooledString.Empty without a valid pool. Use pool.Allocate() to create a new string.");
 		}
+
+		CheckDisposed();
 
 		var currentSpan = AsSpan();
 		if (pos < 0 || pos > currentSpan.Length) {
@@ -354,7 +353,8 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, int Allocat
 	/// </summary>
 	private readonly void CheckDisposed()
 	{
-		if (Pool?.IsDisposed != false) {
+		// Empty string is always valid, no pool needed
+		if (AllocationId != UnmanagedStringPool.EmptyStringAllocationId && Pool?.IsDisposed != false) {
 			throw new ObjectDisposedException(nameof(PooledString));
 		}
 	}

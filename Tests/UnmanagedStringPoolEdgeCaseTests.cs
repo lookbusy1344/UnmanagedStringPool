@@ -481,7 +481,8 @@ public class UnmanagedStringPoolEdgeCaseTests
 	[Fact]
 	public void EmptyStringPool_GetAllocationInfo_ValidId_ReturnsCorrectInfo()
 	{
-		var info = PooledString.Empty.Pool.GetAllocationInfo(UnmanagedStringPool.EmptyStringAllocationId);
+		using var pool = new UnmanagedStringPool(1024);
+		var info = pool.GetAllocationInfo(UnmanagedStringPool.EmptyStringAllocationId);
 
 		Assert.Equal(IntPtr.Zero, info.Pointer);
 		Assert.Equal(0, info.LengthChars);
@@ -491,17 +492,19 @@ public class UnmanagedStringPoolEdgeCaseTests
 	[Fact]
 	public void EmptyStringPool_GetAllocationInfo_InvalidId_ThrowsArgumentException()
 	{
+		using var pool = new UnmanagedStringPool(1024);
 		Assert.Throws<ArgumentException>(() =>
-			PooledString.Empty.Pool.GetAllocationInfo(int.MaxValue));
+			pool.GetAllocationInfo(int.MaxValue));
 	}
 
 	[Fact]
 	public void EmptyStringPool_FreeString_AnyId_NoEffect()
 	{
+		using var pool = new UnmanagedStringPool(1024);
 		// These should not throw or cause issues
-		PooledString.Empty.Pool.FreeString(0);
-		PooledString.Empty.Pool.FreeString(1);
-		PooledString.Empty.Pool.FreeString(-1);
+		pool.FreeString(0);
+		pool.FreeString(1);
+		pool.FreeString(-1);
 	}
 
 	#endregion

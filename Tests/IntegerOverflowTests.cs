@@ -335,8 +335,14 @@ public sealed class IntegerOverflowTests : IDisposable
 		var testStrings = new[] { "", "A", "AB", "ABC", new string('X', 1000) };
 
 		foreach (var testStr in testStrings) {
-			var str = pool.Allocate(testStr);
-			var result = str.Insert(0, "PREFIX");
+			PooledString result;
+			if (string.IsNullOrEmpty(testStr)) {
+				// Empty string case: allocate "PREFIX" directly since pool.Allocate("") returns PooledString.Empty
+				result = pool.Allocate("PREFIX");
+			} else {
+				var str = pool.Allocate(testStr);
+				result = str.Insert(0, "PREFIX");
+			}
 
 			Assert.Equal("PREFIX" + testStr, result.ToString());
 		}

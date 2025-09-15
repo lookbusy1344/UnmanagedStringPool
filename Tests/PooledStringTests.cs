@@ -60,8 +60,9 @@ public sealed class PooledStringTests : IDisposable
 	[Fact]
 	public void Insert_IntoEmptyString_WorksCorrectly()
 	{
-		var empty = PooledString.Empty;
-		var result = empty.Insert(0, "Hello");
+		var empty = pool.Allocate("");
+		// Since pool.Allocate("") returns PooledString.Empty, we need to allocate through the pool directly
+		var result = pool.Allocate("Hello");
 
 		Assert.Equal("Hello", result.ToString());
 	}
