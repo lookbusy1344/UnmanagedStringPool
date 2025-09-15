@@ -286,7 +286,8 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, int Allocat
 	}
 
 	/// <summary>
-	/// Value semantics comparison
+	/// Value semantics comparison. Note this is a record struct, so == and != are already implemented
+	/// We override Equals to compare content rather than pool and allocation ID
 	/// </summary>
 	public readonly bool Equals(PooledString other)
 	{
@@ -302,6 +303,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, int Allocat
 			return false;
 		}
 
+		// compare as spans
 		return AsSpan().Equals(other.AsSpan(), StringComparison.Ordinal);
 	}
 
