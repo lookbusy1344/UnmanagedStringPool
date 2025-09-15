@@ -23,12 +23,12 @@ public class FragmentationCalculationTest
 
 		// Scenario 2: Create many small scattered free blocks with same total free space
 		var strings = new List<PooledString>();
-		for (int i = 0; i < 50; i++) {
+		for (var i = 0; i < 50; i++) {
 			strings.Add(pool.Allocate(new string('B', 4))); // 50 * 4 = 200 chars total
 		}
 
 		// Free every other string to create maximum scattering
-		for (int i = 1; i < strings.Count; i += 2) {
+		for (var i = 1; i < strings.Count; i += 2) {
 			strings[i].Free(); // Frees 25 strings = 100 chars
 		}
 
