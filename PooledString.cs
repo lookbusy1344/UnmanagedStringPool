@@ -2,7 +2,6 @@ namespace LookBusy;
 
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 
 /*	PooledString is a small immutable struct that represents a string allocated from an UnmanagedStringPool.
 	It holds a reference to the pool and an allocation ID, which together identify the actual string data in unmanaged memory.
@@ -69,7 +68,9 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, int Allocat
 			if (pos != 0) {
 				throw new ArgumentOutOfRangeException(nameof(pos), "Cannot insert into an empty string at position other than 0");
 			}
-			throw new InvalidOperationException("Cannot insert into PooledString.Empty without a valid pool. Use pool.Allocate() to create a new string.");
+
+			throw new InvalidOperationException(
+				"Cannot insert into PooledString.Empty without a valid pool. Use pool.Allocate() to create a new string.");
 		}
 
 		CheckDisposed();
@@ -248,7 +249,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, int Allocat
 		}
 
 		var newSize = span.Length + (sizeDiff * occurrences.Count);
-		if (newSize < 0 || newSize > int.MaxValue) {
+		if (newSize < 0) {
 			throw new ArgumentException("Replacement would result in invalid size");
 		}
 

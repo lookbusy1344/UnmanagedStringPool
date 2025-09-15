@@ -33,7 +33,7 @@ using System.Runtime.InteropServices;
 /// - Mutations (Allocate, Free, DefragmentAndGrowPool) require external synchronization
 /// - Disposing the pool while strings are in use is unsafe
 /// </summary>
-public class UnmanagedStringPool : IDisposable
+public sealed class UnmanagedStringPool : IDisposable
 {
 	public const int EmptyStringAllocationId = 0; // Reserved for empty strings
 	private const int DefaultCollectionSize = 16; // Default size for internal collections
@@ -280,7 +280,7 @@ public class UnmanagedStringPool : IDisposable
 		// Check for overflow when converting to bytes and aligning
 		// We need to ensure that (lengthChars * sizeof(char) + alignment - 1) won't overflow
 		const int alignment = 8;
-		var maxSafeLength = (int.MaxValue - alignment + 1) / sizeof(char);
+		const int maxSafeLength = (int.MaxValue - alignment + 1) / sizeof(char);
 		if (lengthChars > maxSafeLength) {
 			throw new ArgumentOutOfRangeException(nameof(lengthChars), "String length would cause integer overflow");
 		}
@@ -322,7 +322,7 @@ public class UnmanagedStringPool : IDisposable
 	/// Get allocation info for a valid allocation ID
 	/// </summary>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	internal virtual AllocationInfo GetAllocationInfo(int id)
+	internal AllocationInfo GetAllocationInfo(int id)
 	{
 		if (id == EmptyStringAllocationId) {
 			return new(IntPtr.Zero, 0, 0);
@@ -336,7 +336,7 @@ public class UnmanagedStringPool : IDisposable
 	/// <summary>
 	/// Mark a string's memory as free for reuse
 	/// </summary>
-	internal virtual void FreeString(int id)
+	internal void FreeString(int id)
 	{
 		if (IsDisposed || id == EmptyStringAllocationId) {
 			// Empty strings do not need to be freed, they are always available
@@ -552,7 +552,7 @@ public class UnmanagedStringPool : IDisposable
 		GC.SuppressFinalize(this);
 	}
 
-	protected virtual void Dispose(bool disposing)
+	private void Dispose(bool disposing)
 	{
 		if (!IsDisposed) {
 			if (disposing) {
