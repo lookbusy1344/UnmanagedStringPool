@@ -32,6 +32,12 @@ This directory contains comprehensive tests for the UnmanagedStringPool implemen
 - Memory efficiency validation
 - Stress testing with interleaved operations
 
+**`FragmentationTest.cs`** - *Specific fragmentation scenario testing*
+- Focused fragmentation pattern creation
+- Fragmentation percentage calculation validation
+- Defragmentation trigger testing
+- Memory compaction verification
+
 **`FinalizerBehaviorTests.cs`** - *Unmanaged resource cleanup and finalizer execution*
 - Finalizer execution without explicit disposal
 - Memory leak prevention validation

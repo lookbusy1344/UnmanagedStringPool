@@ -89,6 +89,21 @@ str1.Dispose();
 // Pool automatically cleans up remaining allocations on disposal
 ```
 
+## Test Suite
+
+The project includes comprehensive test coverage across multiple areas:
+
+- **UnmanagedStringPoolTests.cs**: Core functionality and basic operations
+- **UnmanagedStringPoolEdgeCaseTests.cs**: Edge cases and error conditions
+- **FragmentationAndMemoryTests.cs**: Memory management and defragmentation
+- **FragmentationTest.cs**: Specific fragmentation scenarios
+- **PooledStringTests.cs**: String operations and manipulations
+- **ConcurrentAccessTests.cs**: Thread safety and concurrent operations
+- **DisposalAndLifecycleTests.cs**: Object disposal and lifecycle management
+- **FinalizerBehaviorTests.cs**: Finalizer and GC interaction tests
+- **ClearMethodTests.cs**: Pool clearing operations
+- **IntegerOverflowTests.cs**: Overflow protection and boundary conditions
+
 ## Performance Characteristics
 
 - **Allocation**: O(1) average case with size-indexed free lists
@@ -114,6 +129,12 @@ dotnet test
 
 # Run with detailed output
 dotnet test --logger:"console;verbosity=detailed"
+
+# Run specific test class
+dotnet test --filter "FullyQualifiedName~UnmanagedStringPoolTests"
+
+# Format code (important after making changes)
+dotnet format
 ```
 
 For detailed information about the test suite and coverage areas, see [Tests/README.md](Tests/README.md).

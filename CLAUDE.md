@@ -28,7 +28,7 @@ dotnet test
 dotnet test --logger:"console;verbosity=detailed"
 
 # Run a specific test class
-dotnet test --filter "FullyQualifiedName~StringPoolTest"
+dotnet test --filter "FullyQualifiedName~UnmanagedStringPoolTests"
 
 # Run a specific test method
 dotnet test --filter "FullyQualifiedName~TestClassName.TestMethodName"
@@ -47,6 +47,9 @@ dotnet build --no-incremental
 
 # Format code after making changes
 dotnet format
+
+# Verify code is properly formatted without making changes
+dotnet format --verify-no-changes
 ```
 
 **IMPORTANT**: Always run `dotnet format` after making any code changes to ensure consistent formatting.
