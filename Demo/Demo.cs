@@ -25,8 +25,8 @@ public static class StringDemo
 		Console.WriteLine($"Fragmentation: {pool.FragmentationPercentage:F2}%");
 
 		// Free str2 and show we can reuse its space
-		str3.Dispose();
-		str2.Dispose();
+		str3.Free();
+		str2.Free();
 
 		using var str4 = pool.Allocate("New"); // Should reuse str2's space
 		var str5 = str1.Insert(5, " Beautiful"); // Insert into str1
@@ -68,7 +68,7 @@ public static class StringDemo
 
 			if (Random.Shared.Next(3) == 0) {
 				// sometimes free the last string, this is intended to cause fragmentation
-				last.Dispose();
+				last.Free();
 			}
 
 			last = pooledStr; // Keep the last allocated string
