@@ -1,6 +1,6 @@
 # UnmanagedStringPool
 
-[![CI](https://github.com/lookbusy1344/UnmanagedStringPool/actions/workflows/ci.yml/badge.svg)](https://github.com/lookbusy1344/UnmanagedStringPool/actions/workflows/ci.yml)
+[![Build and test](https://github.com/lookbusy1344/UnmanagedStringPool/actions/workflows/ci.yml/badge.svg)](https://github.com/lookbusy1344/UnmanagedStringPool/actions/workflows/ci.yml)
 
 A high-performance .NET library for managing strings in unmanaged memory to reduce garbage collection pressure in string-intensive applications.
 
