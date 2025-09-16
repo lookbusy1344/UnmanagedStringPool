@@ -385,9 +385,8 @@ public class UnmanagedStringPoolEdgeCaseTests
 		using var pool = new UnmanagedStringPool(1024);
 
 		// Test various invalid IDs
-		Assert.Throws<ArgumentException>(() => pool.GetAllocationInfo(-1));
 		Assert.Throws<ArgumentException>(() => pool.GetAllocationInfo(999999));
-		Assert.Throws<ArgumentException>(() => pool.GetAllocationInfo(int.MaxValue));
+		Assert.Throws<ArgumentException>(() => pool.GetAllocationInfo(uint.MaxValue));
 	}
 
 	[Fact]
@@ -396,9 +395,8 @@ public class UnmanagedStringPoolEdgeCaseTests
 		using var pool = new UnmanagedStringPool(1024);
 
 		// These should not throw - just be ignored
-		pool.FreeString(-1);
 		pool.FreeString(999999);
-		pool.FreeString(int.MaxValue);
+		pool.FreeString(uint.MaxValue);
 	}
 
 	[Fact]
@@ -492,7 +490,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 	{
 		using var pool = new UnmanagedStringPool(1024);
 		Assert.Throws<ArgumentException>(() =>
-			pool.GetAllocationInfo(int.MaxValue));
+			pool.GetAllocationInfo(uint.MaxValue));
 	}
 
 	[Fact]
@@ -502,7 +500,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 		// These should not throw or cause issues
 		pool.FreeString(0);
 		pool.FreeString(1);
-		pool.FreeString(-1);
+		pool.FreeString(999999);
 	}
 
 	#endregion

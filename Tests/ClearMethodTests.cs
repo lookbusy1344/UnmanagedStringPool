@@ -171,7 +171,7 @@ public sealed class ClearMethodTests : IDisposable
 	public void Clear_OldIdsNeverReused()
 	{
 		// Arrange
-		var ids = new int[10];
+		var ids = new uint[10];
 		for (var i = 0; i < 5; i++) {
 			ids[i] = pool.Allocate($"String{i}").AllocationId;
 		}

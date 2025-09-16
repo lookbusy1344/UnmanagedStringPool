@@ -35,7 +35,7 @@ using System.Runtime.InteropServices;
 /// </summary>
 public sealed class UnmanagedStringPool : IDisposable
 {
-	public const int EmptyStringAllocationId = 0; // Reserved for empty strings
+	public const uint EmptyStringAllocationId = 0; // Reserved for empty strings
 	private const int DefaultCollectionSize = 16; // Default size for internal collections
 	private const double FragmentationThreshold = 35.0; // Fragmentation threshold for triggering coalescing (percentage)
 	private const int MinimumBlocksForCoalescing = 8; // Minimum number of free blocks before considering coalescing
@@ -45,7 +45,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	private IntPtr basePtr; // Base pointer to the unmanaged memory block
 	private int capacityBytes; // Total capacity in bytes of the pool
 	private int offsetFromBase; // Current offset from the base pointer, tracks how much space has been used
-	private int lastAllocationId; // Last allocation ID used, starts at 0. Monotonically increasing
+	private uint lastAllocationId; // Last allocation ID used, starts at 0. Monotonically increasing
 	private int freeOperationsSinceLastCoalesce; // Track recent coalescing to avoid excessive operations
 	private int totalFreeBlocks; // Total number of free blocks in the pool
 	private int totalFreeBytes; // Running total of free bytes to avoid recalculation
@@ -54,7 +54,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	private readonly SortedList<int, List<FreeBlock>> freeBlocksBySize = new(DefaultCollectionSize);
 
 	// Central registry of allocated , keyed by allocation ID
-	private readonly Dictionary<int, AllocationInfo> allocations = new(DefaultCollectionSize);
+	private readonly Dictionary<uint, AllocationInfo> allocations = new(DefaultCollectionSize);
 
 	/// <summary>
 	/// Information about an allocated string. OffsetBytes is a convenience field, for when the block is freed. 16 bytes total
@@ -322,7 +322,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	/// Get allocation info for a valid allocation ID
 	/// </summary>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	internal AllocationInfo GetAllocationInfo(int id)
+	internal AllocationInfo GetAllocationInfo(uint id)
 	{
 		if (id == EmptyStringAllocationId) {
 			return new(IntPtr.Zero, 0, 0);
@@ -336,7 +336,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	/// <summary>
 	/// Mark a string's memory as free for reuse
 	/// </summary>
-	internal void FreeString(int id)
+	internal void FreeString(uint id)
 	{
 		if (IsDisposed || id == EmptyStringAllocationId) {
 			// Empty strings do not need to be freed, they are always available
@@ -387,8 +387,9 @@ public sealed class UnmanagedStringPool : IDisposable
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	private PooledString RegisterAllocation(IntPtr ptr, int lengthChars, int offset)
 	{
-		if (lastAllocationId == int.MaxValue) {
-			// in the unlikely event we reach MaxValue (2 billion+ allocations) we cannot allocate more
+		if (lastAllocationId == uint.MaxValue) {
+			// in the unlikely event we reach MaxValue (4 billion+ allocations) we cannot allocate more
+			// it is more likely if the pool is long-lived and cleared repeatedly
 			throw new OutOfMemoryException("Allocation overflow");
 		}
 

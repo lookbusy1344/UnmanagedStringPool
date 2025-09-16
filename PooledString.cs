@@ -21,7 +21,7 @@ using System.Collections.Generic;
 /// Value type representing a string allocated from an unmanaged pool. Just a reference and an allocation ID, 12 bytes total.
 /// </summary>
 [System.Diagnostics.DebuggerDisplay("{ToString(),nq}")]
-public readonly record struct PooledString(UnmanagedStringPool Pool, int AllocationId) : IDisposable
+public readonly record struct PooledString(UnmanagedStringPool Pool, uint AllocationId) : IDisposable
 {
 	// NOTE this struct is technically immutable, but some methods mutate the underlying pool like SetAtPosition() and Free()
 	// It also implements IDisposable to call Free() automatically
