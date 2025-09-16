@@ -50,10 +50,10 @@ public sealed class UnmanagedStringPool : IDisposable
 	private int totalFreeBlocks; // Total number of free blocks in the pool
 	private int totalFreeBytes; // Running total of free bytes to avoid recalculation
 
-	// Index free blocks by size for faster allocation
+	// Index free blocks by size for faster allocation, keyed by block size
 	private readonly SortedList<int, List<FreeBlock>> freeBlocksBySize = new(DefaultCollectionSize);
 
-	// Central registry of allocated strings
+	// Central registry of allocated , keyed by allocation ID
 	private readonly Dictionary<int, AllocationInfo> allocations = new(DefaultCollectionSize);
 
 	/// <summary>
@@ -387,6 +387,11 @@ public sealed class UnmanagedStringPool : IDisposable
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	private PooledString RegisterAllocation(IntPtr ptr, int lengthChars, int offset)
 	{
+		if (lastAllocationId == int.MaxValue) {
+			// in the unlikely event we reach MaxValue (2 billion+ allocations) we cannot allocate more
+			throw new OutOfMemoryException("Allocation overflow");
+		}
+
 		++lastAllocationId;
 		allocations[lastAllocationId] = new(ptr, lengthChars, offset);
 		return new(this, lastAllocationId);
