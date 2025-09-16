@@ -357,8 +357,11 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, int Allocat
 	private readonly void CheckDisposed()
 	{
 		// Empty string is always valid, no pool needed
-		if (AllocationId != UnmanagedStringPool.EmptyStringAllocationId && Pool?.IsDisposed != false) {
-			throw new ObjectDisposedException(nameof(PooledString));
+		if (AllocationId != UnmanagedStringPool.EmptyStringAllocationId) {
+			var pool = Pool; // Capture reference to avoid race condition
+			if (pool is null || pool.IsDisposed) {
+				throw new ObjectDisposedException(nameof(PooledString));
+			}
 		}
 	}
 

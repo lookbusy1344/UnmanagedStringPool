@@ -353,10 +353,6 @@ public sealed class UnmanagedStringPool : IDisposable
 
 			++freeOperationsSinceLastCoalesce;
 
-			// DEBUG CODE - always coalesce for testing purposes
-			//CoalesceFreeBlocks();
-			//freeOperationsSinceLastCoalesce = 0;
-
 			if (FragmentationPercentage > FragmentationThreshold &&
 				totalFreeBlocks >= MinimumBlocksForCoalescing &&
 				freeOperationsSinceLastCoalesce >= MinimumFreesBetweenCoalescing) {
@@ -387,7 +383,14 @@ public sealed class UnmanagedStringPool : IDisposable
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	private PooledString RegisterAllocation(IntPtr ptr, int lengthChars, int offset)
 	{
-		++lastAllocationId;
+		// Protect against integer overflow - wrap around to 1 if we hit max value
+		// EmptyStringAllocationId (0) is reserved, so start from 1
+		if (lastAllocationId == int.MaxValue) {
+			lastAllocationId = 1;
+		} else {
+			++lastAllocationId;
+		}
+
 		allocations[lastAllocationId] = new(ptr, lengthChars, offset);
 		return new(this, lastAllocationId);
 	}
