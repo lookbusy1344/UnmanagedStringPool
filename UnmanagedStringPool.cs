@@ -371,7 +371,11 @@ public sealed class UnmanagedStringPool : IDisposable
 	/// Create an empty PooledString in this pool. Requires a pool so we know where to add if insertion occurs
 	/// </summary>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	internal PooledString CreateEmptyString() => new(this, EmptyStringAllocationId);
+	internal PooledString CreateEmptyString()
+	{
+		ObjectDisposedException.ThrowIf(IsDisposed, typeof(UnmanagedStringPool));
+		return new(this, EmptyStringAllocationId);
+	}
 
 	#endregion
 
