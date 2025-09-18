@@ -430,7 +430,7 @@ public sealed class ConcurrentAccessTests : IDisposable
 			tasks[t] = Task.Run(() => {
 				try {
 					for (var i = 0; i < 200; i++) {
-						var empty = PooledString.Empty;
+						var empty = pool.CreateEmptyString();
 
 						// All these operations should be thread-safe on empty strings
 						var span = empty.AsSpan();

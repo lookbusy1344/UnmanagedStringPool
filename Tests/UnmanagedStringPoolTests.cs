@@ -221,7 +221,7 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 	[Fact]
 	public void FreeString_EmptyString_NoEffect()
 	{
-		var emptyStr = PooledString.Empty;
+		var emptyStr = pool.CreateEmptyString();
 
 		// Should not throw or cause issues
 		emptyStr.Free();

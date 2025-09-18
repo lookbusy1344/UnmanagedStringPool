@@ -144,7 +144,7 @@ public sealed class UnmanagedStringPool : IDisposable
 		ObjectDisposedException.ThrowIf(IsDisposed, typeof(UnmanagedStringPool));
 
 		if (value.IsEmpty) {
-			return PooledString.Empty;
+			return CreateEmptyString();
 		}
 
 		// allocate a buffer for this string
@@ -274,7 +274,7 @@ public sealed class UnmanagedStringPool : IDisposable
 		ObjectDisposedException.ThrowIf(IsDisposed, typeof(UnmanagedStringPool));
 
 		if (lengthChars <= 0) {
-			return PooledString.Empty;
+			return CreateEmptyString();
 		}
 
 		// Check for overflow when converting to bytes and aligning
@@ -366,6 +366,12 @@ public sealed class UnmanagedStringPool : IDisposable
 			}
 		}
 	}
+
+	/// <summary>
+	/// Create an empty PooledString in this pool. Requires a pool so we know where to add if insertion occurs
+	/// </summary>
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	internal PooledString CreateEmptyString() => new(this, EmptyStringAllocationId);
 
 	#endregion
 

@@ -236,7 +236,8 @@ public class DisposalAndLifecycleTests
 	[Fact]
 	public void EmptyString_Dispose_DoesNotThrow()
 	{
-		var empty = PooledString.Empty;
+		using var pool = new UnmanagedStringPool(1024);
+		var empty = pool.CreateEmptyString();
 
 		empty.Free();
 		empty.Dispose();
@@ -247,7 +248,8 @@ public class DisposalAndLifecycleTests
 	[Fact]
 	public void EmptyString_MultipleDispose_Safe()
 	{
-		var empty = PooledString.Empty;
+		using var pool = new UnmanagedStringPool(1024);
+		var empty = pool.CreateEmptyString();
 
 		for (var i = 0; i < 10; i++) {
 			empty.Free();
@@ -263,8 +265,9 @@ public class DisposalAndLifecycleTests
 	[Fact]
 	public void EmptyString_AlwaysValid_EvenAfterMultipleDisposals()
 	{
-		var empty1 = PooledString.Empty;
-		var empty2 = PooledString.Empty;
+		using var pool = new UnmanagedStringPool(1024);
+		var empty1 = pool.CreateEmptyString();
+		var empty2 = pool.CreateEmptyString();
 
 		empty1.Dispose();
 		empty2.Free();

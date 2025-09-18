@@ -337,7 +337,7 @@ public sealed class IntegerOverflowTests : IDisposable
 		foreach (var testStr in testStrings) {
 			PooledString result;
 			if (string.IsNullOrEmpty(testStr)) {
-				// Empty string case: allocate "PREFIX" directly since pool.Allocate("") returns PooledString.Empty
+				// Empty string case: allocate "PREFIX" directly since we can't insert into an empty string from a different pool
 				result = pool.Allocate("PREFIX");
 			} else {
 				var str = pool.Allocate(testStr);

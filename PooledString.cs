@@ -26,11 +26,6 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	// NOTE this struct is technically immutable, but some methods mutate the underlying pool like SetAtPosition() and Free()
 	// It also implements IDisposable to call Free() automatically
 
-	/// <summary>
-	/// Represents an empty pooled string
-	/// </summary>
-	public static readonly PooledString Empty = new(null!, UnmanagedStringPool.EmptyStringAllocationId);
-
 	#region Public API
 
 	/// <summary>
@@ -64,13 +59,8 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 			return this;
 		}
 
-		if (AllocationId == UnmanagedStringPool.EmptyStringAllocationId) {
-			if (pos != 0) {
-				throw new ArgumentOutOfRangeException(nameof(pos), "Cannot insert into an empty string at position other than 0");
-			}
-
-			throw new InvalidOperationException(
-				"Cannot insert into PooledString.Empty without a valid pool. Use pool.Allocate() to create a new string.");
+		if (AllocationId == UnmanagedStringPool.EmptyStringAllocationId && pos != 0) {
+			throw new ArgumentOutOfRangeException(nameof(pos), "Cannot insert into an empty string at position other than 0");
 		}
 
 		CheckDisposed();
@@ -356,8 +346,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	/// </summary>
 	private readonly void CheckDisposed()
 	{
-		// Empty string is always valid, no pool needed
-		if (AllocationId != UnmanagedStringPool.EmptyStringAllocationId && Pool?.IsDisposed != false) {
+		if (Pool.IsDisposed) {
 			throw new ObjectDisposedException(nameof(PooledString));
 		}
 	}

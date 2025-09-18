@@ -60,9 +60,8 @@ public sealed class PooledStringTests : IDisposable
 	[Fact]
 	public void Insert_IntoEmptyString_WorksCorrectly()
 	{
-		var empty = pool.Allocate("");
-		// Since pool.Allocate("") returns PooledString.Empty, we need to allocate through the pool directly
-		var result = pool.Allocate("Hello");
+		var empty = pool.CreateEmptyString();
+		var result = empty.Insert(0, "Hello");
 
 		Assert.Equal("Hello", result.ToString());
 	}
@@ -80,9 +79,36 @@ public sealed class PooledStringTests : IDisposable
 	[Fact]
 	public void Insert_IntoEmptyStringInvalidPosition_ThrowsArgumentOutOfRangeException()
 	{
-		var empty = PooledString.Empty;
+		var empty = pool.CreateEmptyString();
 
 		Assert.Throws<ArgumentOutOfRangeException>(() => empty.Insert(1, "test"));
+	}
+
+	[Fact]
+	public void Insert_IntoAllocatedEmptyString_WorksCorrectly()
+	{
+		var empty = pool.Allocate("");
+		var result = empty.Insert(0, "World");
+
+		Assert.Equal("World", result.ToString());
+	}
+
+	[Fact]
+	public void Insert_AppendToString_WorksCorrectly()
+	{
+		var str = pool.Allocate("Hello");
+		var result = str.Insert(str.Length, " World");
+
+		Assert.Equal("Hello World", result.ToString());
+	}
+
+	[Fact]
+	public void Insert_AppendToEmptyString_WorksCorrectly()
+	{
+		var empty = pool.CreateEmptyString();
+		var result = empty.Insert(empty.Length, "Appended");
+
+		Assert.Equal("Appended", result.ToString());
 	}
 
 	#endregion
@@ -172,6 +198,7 @@ public sealed class PooledStringTests : IDisposable
 
 	#endregion
 
+
 	#region Search Operations Tests
 
 	[Fact]
@@ -203,7 +230,7 @@ public sealed class PooledStringTests : IDisposable
 	[Fact]
 	public void IndexOf_InEmptyString_ReturnsCorrectly()
 	{
-		var empty = PooledString.Empty;
+		var empty = pool.CreateEmptyString();
 
 		Assert.Equal(0, empty.IndexOf(""));
 		Assert.Equal(-1, empty.IndexOf("test"));
@@ -303,7 +330,7 @@ public sealed class PooledStringTests : IDisposable
 	[Fact]
 	public void StringOperations_WithEmptyString_WorkCorrectly()
 	{
-		var empty = PooledString.Empty;
+		var empty = pool.CreateEmptyString();
 
 		Assert.True(empty.Contains(""));
 		Assert.True(empty.StartsWith(""));
@@ -382,7 +409,7 @@ public sealed class PooledStringTests : IDisposable
 	[Fact]
 	public void AsSpan_EmptyString_ReturnsEmptySpan()
 	{
-		var empty = PooledString.Empty;
+		var empty = pool.CreateEmptyString();
 		var span = empty.AsSpan();
 
 		Assert.True(span.IsEmpty);
@@ -425,8 +452,9 @@ public sealed class PooledStringTests : IDisposable
 	[Fact]
 	public void Equals_EmptyStrings_ReturnsTrue()
 	{
-		var empty1 = PooledString.Empty;
-		var empty2 = PooledString.Empty;
+		using var pool = new UnmanagedStringPool(1024);
+		var empty1 = pool.CreateEmptyString();
+		var empty2 = pool.CreateEmptyString();
 
 		Assert.True(empty1.Equals(empty2));
 		Assert.True(empty1 == empty2);
@@ -435,7 +463,7 @@ public sealed class PooledStringTests : IDisposable
 	[Fact]
 	public void Equals_EmptyWithAllocated_WorksCorrectly()
 	{
-		var empty = PooledString.Empty;
+		var empty = pool.CreateEmptyString();
 		var emptyAllocated = pool.Allocate("");
 		var nonEmpty = pool.Allocate("Hello");
 
@@ -501,7 +529,7 @@ public sealed class PooledStringTests : IDisposable
 	[Fact]
 	public void GetHashCode_EmptyString_ReturnsZero()
 	{
-		var empty = PooledString.Empty;
+		var empty = pool.CreateEmptyString();
 
 		Assert.Equal(0, empty.GetHashCode());
 	}
@@ -639,7 +667,7 @@ public sealed class PooledStringTests : IDisposable
 	[Fact]
 	public void Length_EmptyString_ReturnsZero()
 	{
-		var empty = PooledString.Empty;
+		var empty = pool.CreateEmptyString();
 		var emptyAllocated = pool.Allocate("");
 
 		Assert.Equal(0, empty.Length);
@@ -649,7 +677,7 @@ public sealed class PooledStringTests : IDisposable
 	[Fact]
 	public void IsEmpty_EmptyString_ReturnsTrue()
 	{
-		var empty = PooledString.Empty;
+		var empty = pool.CreateEmptyString();
 		var emptyAllocated = pool.Allocate("");
 
 		Assert.True(empty.IsEmpty);
@@ -679,7 +707,7 @@ public sealed class PooledStringTests : IDisposable
 	[Fact]
 	public void ToString_EmptyString_ReturnsEmptyString()
 	{
-		var empty = PooledString.Empty;
+		var empty = pool.CreateEmptyString();
 
 		Assert.Equal("", empty.ToString());
 	}

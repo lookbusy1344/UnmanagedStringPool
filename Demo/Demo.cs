@@ -60,7 +60,7 @@ public static class StringDemo
 
 		Console.WriteLine($"Buffer dump: \"{pool.DumpBufferAsString()}\"");
 
-		var last = PooledString.Empty;
+		var last = pool.CreateEmptyString();
 		for (var i = 0; i < 100; ++i) {
 			var randomStr = RandomString(Random.Shared.Next(5, 150));
 			var pooledStr = pool.Allocate(randomStr);
