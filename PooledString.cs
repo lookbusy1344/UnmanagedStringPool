@@ -315,7 +315,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 			return 0;
 		}
 
-		if (Pool.IsDisposed) {
+		if (Pool?.IsDisposed == true) {
 			return -1;
 		}
 
@@ -325,18 +325,20 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 		var hash = new HashCode();
 
 		if (span.Length <= maxChars) {
-			// Hash all characters
-			foreach (var c in span) {
-				hash.Add(c);
+			// Hash all characters using for loop to avoid allocation
+			for (var i = 0; i < span.Length; i++) {
+				hash.Add(span[i]);
 			}
 		} else {
-			// Hash first fragment and last fragment chars
-			foreach (var c in span[..halfMax]) {
-				hash.Add(c);
+			// Hash first fragment chars
+			for (var i = 0; i < halfMax; i++) {
+				hash.Add(span[i]);
 			}
 
-			foreach (var c in span[^halfMax..]) {
-				hash.Add(c);
+			// Hash last fragment chars
+			var startIndex = span.Length - halfMax;
+			for (var i = startIndex; i < span.Length; i++) {
+				hash.Add(span[i]);
 			}
 		}
 
@@ -350,7 +352,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	/// </summary>
 	private readonly void CheckDisposed()
 	{
-		if (Pool.IsDisposed) {
+		if (Pool?.IsDisposed != false) {
 			throw new ObjectDisposedException(nameof(PooledString));
 		}
 	}

@@ -510,8 +510,12 @@ public sealed class UnmanagedStringPool : IDisposable
 			return;
 		}
 
-		// Collect all blocks and sort by offset
-		Span<FreeBlock> blocks = stackalloc FreeBlock[totalFreeBlocks];
+		// Use heap allocation for large numbers of blocks to avoid stack overflow
+		const int maxStackAlloc = 1024;
+		var blocks = totalFreeBlocks <= maxStackAlloc 
+			? stackalloc FreeBlock[totalFreeBlocks] 
+			: new FreeBlock[totalFreeBlocks];
+		
 		var index = 0;
 
 		foreach (var blockList in freeBlocksBySize.Values) {
