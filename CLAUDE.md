@@ -69,6 +69,8 @@ dotnet format --verify-no-changes
 - Full copy semantics, no heap allocation per string
 - Becomes invalid if pool is disposed or string is freed
 - Implements IDisposable for deterministic cleanup
+- Empty strings use reserved allocation ID (0) with no memory allocation
+- Empty strings become invalid after pool disposal since operations like Insert require the pool
 
 ### Memory Management Strategy
 - 8-byte alignment for optimal memory usage
@@ -82,9 +84,13 @@ dotnet format --verify-no-changes
 - **UnmanagedStringPoolTests.cs**: Core functionality tests
 - **UnmanagedStringPoolEdgeCaseTests.cs**: Edge cases and error conditions
 - **FragmentationAndMemoryTests.cs**: Memory management and fragmentation
+- **FragmentationTest.cs**: Specific fragmentation scenarios
 - **PooledStringTests.cs**: String operations and manipulations
 - **ConcurrentAccessTests.cs**: Thread safety validation
 - **DisposalAndLifecycleTests.cs**: Disposal and lifecycle management
+- **FinalizerBehaviorTests.cs**: Finalizer and GC interaction tests
+- **ClearMethodTests.cs**: Pool clearing operations
+- **IntegerOverflowTests.cs**: Overflow protection and boundary conditions
 
 ## Code Style
 

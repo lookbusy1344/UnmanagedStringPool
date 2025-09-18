@@ -78,6 +78,9 @@ using var pool = new UnmanagedStringPool(1024 * 1024);
 PooledString str1 = pool.AllocateString("Hello, World!");
 PooledString str2 = pool.AllocateString("Unmanaged strings!");
 
+// Create empty strings (optimized - no memory allocation)
+PooledString empty = pool.CreateEmptyString();
+
 // Use spans directly to avoid heap allocations
 Console.Out.WriteLine(str1.AsSpan());  // Console.Out.WriteLine accepts ReadOnlySpan<char>
 int length = str2.Length;
@@ -88,6 +91,14 @@ str1.Dispose();
 
 // Pool automatically cleans up remaining allocations on disposal
 ```
+
+### Empty String Behavior
+
+Empty strings receive special optimization:
+- Use reserved allocation ID (0) with no actual memory allocation
+- Remain valid for read operations even after other strings are freed
+- **Important**: Become invalid after pool disposal since operations like `Insert()` require the pool to allocate memory for the resulting non-empty string
+- All empty strings from any pool are considered equal
 
 ## Test Suite
 

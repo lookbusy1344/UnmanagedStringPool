@@ -11,6 +11,10 @@ using System.Collections.Generic;
 	It also has methods to manipulate the string, such as Insert and Replace, which return new PooledString instances with the modified content.
 	These operations allocate new memory from the pool as needed.
 
+	Empty strings have special behavior: they use a reserved allocation ID (0) and don't require actual pool memory.
+	However, empty strings become invalid after pool disposal since expanding them would require the pool.
+	Operations like Insert on empty strings require a valid pool to allocate the resulting non-empty string.
+
 	PooledString implements IDisposable to allow freeing its memory back to the pool when no longer needed.
 	Double-freeing is safe - freeing an already freed PooledString has no effect.
 
