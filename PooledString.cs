@@ -315,7 +315,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 			return 0;
 		}
 
-		if (Pool?.IsDisposed == true) {
+		if (Pool.IsDisposed) {
 			return -1;
 		}
 
@@ -352,7 +352,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	/// </summary>
 	private readonly void CheckDisposed()
 	{
-		if (Pool?.IsDisposed != false) {
+		if (Pool.IsDisposed) {
 			throw new ObjectDisposedException(nameof(PooledString));
 		}
 	}
