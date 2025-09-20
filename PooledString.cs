@@ -47,11 +47,26 @@ using System.Collections.Generic;
 /// original.AsSpan();    // Also throws ArgumentException
 /// </code>
 /// </example>
-/// <para>
 /// This behavior mirrors unmanaged memory semantics where freeing memory invalidates
 /// all pointers to it. Multiple disposals are safe (idempotent) - calling Dispose()
 /// on an already-freed PooledString has no effect.
 /// </para>
+/// <para>
+/// <b>Warning - Memory Leaks:</b> Reassigning a PooledString variable without first
+/// calling Dispose() will leak the original allocation. The original memory remains
+/// allocated in the pool but becomes unreferenced and inaccessible.
+/// </para>
+/// <example>
+/// <code>
+/// var str = pool.Allocate("Original");
+/// str = pool.Allocate("New");  // LEAK: "Original" is now unreferenced but still allocated
+///
+/// // Correct approach:
+/// var str = pool.Allocate("Original");
+/// str.Dispose();                // Free the original allocation first
+/// str = pool.Allocate("New");   // Now safe to reassign
+/// </code>
+/// </example>
 /// </remarks>
 [System.Diagnostics.DebuggerDisplay("{ToString(),nq}")]
 public readonly record struct PooledString(UnmanagedStringPool Pool, uint AllocationId) : IDisposable

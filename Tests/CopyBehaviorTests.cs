@@ -7,12 +7,14 @@ using Xunit;
 /// These tests document and verify that PooledString copies share the same allocation,
 /// and disposing any copy invalidates all copies.
 /// </summary>
-public class CopyBehaviorTests {
+public class CopyBehaviorTests
+{
 	/// <summary>
 	/// Verify that copying a PooledString results in both instances sharing the same allocation ID
 	/// </summary>
 	[Fact]
-	public void CopySharing_CopiedPooledStrings_ShareSameAllocationId() {
+	public void CopySharing_CopiedPooledStrings_ShareSameAllocationId()
+	{
 		using var pool = new UnmanagedStringPool(1024);
 		var original = pool.Allocate("Hello World");
 		var copy = original;
@@ -29,7 +31,8 @@ public class CopyBehaviorTests {
 	/// Verify that disposing the original PooledString invalidates all copies
 	/// </summary>
 	[Fact]
-	public void DisposalInvalidation_DisposingOriginal_InvalidatesAllCopies() {
+	public void DisposalInvalidation_DisposingOriginal_InvalidatesAllCopies()
+	{
 		using var pool = new UnmanagedStringPool(1024);
 		var original = pool.Allocate("Test String");
 		var copy1 = original;
@@ -53,7 +56,8 @@ public class CopyBehaviorTests {
 	/// Verify that disposing a copy invalidates the original and all other copies
 	/// </summary>
 	[Fact]
-	public void DisposalInvalidation_DisposingCopy_InvalidatesOriginalAndAllCopies() {
+	public void DisposalInvalidation_DisposingCopy_InvalidatesOriginalAndAllCopies()
+	{
 		using var pool = new UnmanagedStringPool(1024);
 		var original = pool.Allocate("Another Test");
 		var copy1 = original;
@@ -72,7 +76,8 @@ public class CopyBehaviorTests {
 	/// Verify that multiple disposals are safe (idempotent)
 	/// </summary>
 	[Fact]
-	public void MultipleDisposals_DisposingMultipleTimes_IsSafe() {
+	public void MultipleDisposals_DisposingMultipleTimes_IsSafe()
+	{
 		using var pool = new UnmanagedStringPool(1024);
 		var original = pool.Allocate("Multiple Disposal Test");
 		var copy = original;
@@ -95,7 +100,8 @@ public class CopyBehaviorTests {
 	/// Verify that PooledString has value semantics but shares allocation
 	/// </summary>
 	[Fact]
-	public void ValueSemantics_StructCopies_MaintainValueSemantics() {
+	public void ValueSemantics_StructCopies_MaintainValueSemantics()
+	{
 		using var pool = new UnmanagedStringPool(1024);
 		var str1 = pool.Allocate("Value Semantics");
 		var str2 = str1;
@@ -118,7 +124,8 @@ public class CopyBehaviorTests {
 	/// Test copy behavior with empty strings
 	/// </summary>
 	[Fact]
-	public void EmptyStrings_CopyingEmptyString_BehavesCorrectly() {
+	public void EmptyStrings_CopyingEmptyString_BehavesCorrectly()
+	{
 		using var pool = new UnmanagedStringPool(1024);
 		var empty1 = pool.Allocate("");
 		var empty2 = empty1;
@@ -142,7 +149,8 @@ public class CopyBehaviorTests {
 	/// Test that operations creating new PooledStrings don't affect copies of the original
 	/// </summary>
 	[Fact]
-	public void Operations_CreatingNewPooledStrings_DontAffectOriginalCopies() {
+	public void Operations_CreatingNewPooledStrings_DontAffectOriginalCopies()
+	{
 		using var pool = new UnmanagedStringPool(1024);
 		var original = pool.Allocate("Original");
 		var copy = original;
@@ -170,7 +178,8 @@ public class CopyBehaviorTests {
 	/// Test copy behavior across using blocks
 	/// </summary>
 	[Fact]
-	public void UsingBlocks_CopyAcrossUsingBlocks_InvalidatesCorrectly() {
+	public void UsingBlocks_CopyAcrossUsingBlocks_InvalidatesCorrectly()
+	{
 		using var pool = new UnmanagedStringPool(1024);
 		PooledString copyOutsideUsing;
 
@@ -187,7 +196,8 @@ public class CopyBehaviorTests {
 	/// Test that Free() and Dispose() have identical behavior regarding copies
 	/// </summary>
 	[Fact]
-	public void FreeVsDispose_BothMethods_HaveSameCopyInvalidationBehavior() {
+	public void FreeVsDispose_BothMethods_HaveSameCopyInvalidationBehavior()
+	{
 		using var pool = new UnmanagedStringPool(2048);
 
 		// Test Free()
@@ -209,7 +219,8 @@ public class CopyBehaviorTests {
 	/// Verify behavior when copying between different variables and collections
 	/// </summary>
 	[Fact]
-	public void Collections_StoringCopiesInCollections_ShareAllocation() {
+	public void Collections_StoringCopiesInCollections_ShareAllocation()
+	{
 		using var pool = new UnmanagedStringPool(1024);
 		var original = pool.Allocate("Collection Test");
 
@@ -238,7 +249,8 @@ public class CopyBehaviorTests {
 	/// Document that assignment creates a copy that shares allocation
 	/// </summary>
 	[Fact]
-	public void Assignment_SimpleAssignment_CreatesCopyWithSharedAllocation() {
+	public void Assignment_SimpleAssignment_CreatesCopyWithSharedAllocation()
+	{
 		using var pool = new UnmanagedStringPool(1024);
 		var a = pool.Allocate("A");
 		var b = pool.Allocate("B");
@@ -264,7 +276,8 @@ public class CopyBehaviorTests {
 	/// Test that Duplicate creates an independent copy with a different allocation ID
 	/// </summary>
 	[Fact]
-	public void Duplicate_CreatesIndependentCopy_WithDifferentAllocationId() {
+	public void Duplicate_CreatesIndependentCopy_WithDifferentAllocationId()
+	{
 		using var pool = new UnmanagedStringPool(1024);
 		var original = pool.Allocate("Original String");
 		var cloned = original.Duplicate();
@@ -282,7 +295,8 @@ public class CopyBehaviorTests {
 	/// Test that disposing a cloned string doesn't affect the original
 	/// </summary>
 	[Fact]
-	public void Duplicate_DisposingDuplicate_DoesNotAffectOriginal() {
+	public void Duplicate_DisposingDuplicate_DoesNotAffectOriginal()
+	{
 		using var pool = new UnmanagedStringPool(1024);
 		var original = pool.Allocate("Test Duplicate Independence");
 		var cloned = original.Duplicate();
@@ -301,7 +315,8 @@ public class CopyBehaviorTests {
 	/// Test that disposing the original doesn't affect the clone
 	/// </summary>
 	[Fact]
-	public void Duplicate_DisposingOriginal_DoesNotAffectDuplicate() {
+	public void Duplicate_DisposingOriginal_DoesNotAffectDuplicate()
+	{
 		using var pool = new UnmanagedStringPool(1024);
 		var original = pool.Allocate("Another Independence Test");
 		var cloned = original.Duplicate();
@@ -320,7 +335,8 @@ public class CopyBehaviorTests {
 	/// Test cloning empty strings
 	/// </summary>
 	[Fact]
-	public void Duplicate_EmptyString_ReturnsEmptyString() {
+	public void Duplicate_EmptyString_ReturnsEmptyString()
+	{
 		using var pool = new UnmanagedStringPool(1024);
 		var empty = pool.Allocate("");
 		var clonedEmpty = empty.Duplicate();
@@ -336,7 +352,8 @@ public class CopyBehaviorTests {
 	/// Test that cloning creates truly independent strings
 	/// </summary>
 	[Fact]
-	public void Duplicate_MultipleDuplicates_AllIndependent() {
+	public void Duplicate_MultipleDuplicates_AllIndependent()
+	{
 		using var pool = new UnmanagedStringPool(1024);
 		var original = pool.Allocate("Multi Duplicate Test");
 		var clone1 = original.Duplicate();
@@ -369,7 +386,8 @@ public class CopyBehaviorTests {
 	/// Test Duplicate vs assignment behavior comparison
 	/// </summary>
 	[Fact]
-	public void Duplicate_VsAssignment_DifferentBehavior() {
+	public void Duplicate_VsAssignment_DifferentBehavior()
+	{
 		using var pool = new UnmanagedStringPool(1024);
 		var original = pool.Allocate("Compare Behaviors");
 
@@ -395,7 +413,8 @@ public class CopyBehaviorTests {
 	/// Test that Duplicate throws when pool is disposed
 	/// </summary>
 	[Fact]
-	public void Duplicate_DisposedPool_ThrowsObjectDisposedException() {
+	public void Duplicate_DisposedPool_ThrowsObjectDisposedException()
+	{
 		var pool = new UnmanagedStringPool(1024);
 		var str = pool.Allocate("Test String");
 
@@ -410,7 +429,8 @@ public class CopyBehaviorTests {
 	/// Test Duplicate with large strings
 	/// </summary>
 	[Fact]
-	public void Duplicate_LargeString_WorksCorrectly() {
+	public void Duplicate_LargeString_WorksCorrectly()
+	{
 		using var pool = new UnmanagedStringPool(8192);
 		var largeContent = new string('X', 1000);
 		var original = pool.Allocate(largeContent);
