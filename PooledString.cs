@@ -90,6 +90,29 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	public readonly void Free() => Pool?.FreeString(AllocationId);
 
 	/// <summary>
+	/// Creates a deep copy of this PooledString with a new allocation ID.
+	/// </summary>
+	/// <returns>A new PooledString with the same content but a different allocation ID</returns>
+	/// <remarks>
+	/// Unlike simple assignment which creates copies that share the same allocation,
+	/// Clone() allocates new memory in the pool for an independent copy.
+	/// The cloned string will not be affected if the original is disposed, and vice versa.
+	/// </remarks>
+	public readonly PooledString Clone()
+	{
+		if (AllocationId == UnmanagedStringPool.EmptyStringAllocationId) {
+			// Empty strings don't need actual cloning, just return the same empty reference
+			return this;
+		}
+
+		CheckDisposed();
+
+		// Allocate new memory in the pool with the same content
+		var span = AsSpan();
+		return Pool.Allocate(span);
+	}
+
+	/// <summary>
 	/// Allocate a new PooledString with the given value at the specified position. Old PooledString is unchanged.
 	/// </summary>
 	public readonly PooledString Insert(int pos, ReadOnlySpan<char> value)

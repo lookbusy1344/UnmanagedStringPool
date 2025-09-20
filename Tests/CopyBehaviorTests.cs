@@ -259,4 +259,171 @@ public class CopyBehaviorTests {
 		Assert.Throws<ArgumentException>(() => a.AsSpan());
 		Assert.Throws<ArgumentException>(() => b.AsSpan());
 	}
+
+	/// <summary>
+	/// Test that Clone creates an independent copy with a different allocation ID
+	/// </summary>
+	[Fact]
+	public void Clone_CreatesIndependentCopy_WithDifferentAllocationId() {
+		using var pool = new UnmanagedStringPool(1024);
+		var original = pool.Allocate("Original String");
+		var cloned = original.Clone();
+
+		// Should have same content but different allocation IDs
+		Assert.Equal(original.ToString(), cloned.ToString());
+		Assert.NotEqual(original.AllocationId, cloned.AllocationId);
+
+		// Both should be valid
+		Assert.Equal("Original String", original.ToString());
+		Assert.Equal("Original String", cloned.ToString());
+	}
+
+	/// <summary>
+	/// Test that disposing a cloned string doesn't affect the original
+	/// </summary>
+	[Fact]
+	public void Clone_DisposingClone_DoesNotAffectOriginal() {
+		using var pool = new UnmanagedStringPool(1024);
+		var original = pool.Allocate("Test Clone Independence");
+		var cloned = original.Clone();
+
+		// Dispose the clone
+		cloned.Dispose();
+
+		// Original should still be valid
+		Assert.Equal("Test Clone Independence", original.ToString());
+
+		// Clone should be invalid
+		Assert.Throws<ArgumentException>(() => cloned.AsSpan());
+	}
+
+	/// <summary>
+	/// Test that disposing the original doesn't affect the clone
+	/// </summary>
+	[Fact]
+	public void Clone_DisposingOriginal_DoesNotAffectClone() {
+		using var pool = new UnmanagedStringPool(1024);
+		var original = pool.Allocate("Another Independence Test");
+		var cloned = original.Clone();
+
+		// Dispose the original
+		original.Dispose();
+
+		// Clone should still be valid
+		Assert.Equal("Another Independence Test", cloned.ToString());
+
+		// Original should be invalid
+		Assert.Throws<ArgumentException>(() => original.AsSpan());
+	}
+
+	/// <summary>
+	/// Test cloning empty strings
+	/// </summary>
+	[Fact]
+	public void Clone_EmptyString_ReturnsEmptyString() {
+		using var pool = new UnmanagedStringPool(1024);
+		var empty = pool.Allocate("");
+		var clonedEmpty = empty.Clone();
+
+		// Both should be empty with the special empty allocation ID
+		Assert.Equal(UnmanagedStringPool.EmptyStringAllocationId, empty.AllocationId);
+		Assert.Equal(UnmanagedStringPool.EmptyStringAllocationId, clonedEmpty.AllocationId);
+		Assert.Equal("", clonedEmpty.ToString());
+		Assert.True(clonedEmpty.IsEmpty);
+	}
+
+	/// <summary>
+	/// Test that cloning creates truly independent strings
+	/// </summary>
+	[Fact]
+	public void Clone_MultipleClones_AllIndependent() {
+		using var pool = new UnmanagedStringPool(1024);
+		var original = pool.Allocate("Multi Clone Test");
+		var clone1 = original.Clone();
+		var clone2 = original.Clone();
+		var clone3 = clone1.Clone();  // Clone of a clone
+
+		// All should have the same content
+		Assert.Equal("Multi Clone Test", original.ToString());
+		Assert.Equal("Multi Clone Test", clone1.ToString());
+		Assert.Equal("Multi Clone Test", clone2.ToString());
+		Assert.Equal("Multi Clone Test", clone3.ToString());
+
+		// All should have different allocation IDs
+		Assert.NotEqual(original.AllocationId, clone1.AllocationId);
+		Assert.NotEqual(original.AllocationId, clone2.AllocationId);
+		Assert.NotEqual(original.AllocationId, clone3.AllocationId);
+		Assert.NotEqual(clone1.AllocationId, clone2.AllocationId);
+		Assert.NotEqual(clone1.AllocationId, clone3.AllocationId);
+		Assert.NotEqual(clone2.AllocationId, clone3.AllocationId);
+
+		// Disposing any one shouldn't affect the others
+		clone1.Dispose();
+		Assert.Equal("Multi Clone Test", original.ToString());
+		Assert.Throws<ArgumentException>(() => clone1.AsSpan());
+		Assert.Equal("Multi Clone Test", clone2.ToString());
+		Assert.Equal("Multi Clone Test", clone3.ToString());
+	}
+
+	/// <summary>
+	/// Test Clone vs assignment behavior comparison
+	/// </summary>
+	[Fact]
+	public void Clone_VsAssignment_DifferentBehavior() {
+		using var pool = new UnmanagedStringPool(1024);
+		var original = pool.Allocate("Compare Behaviors");
+
+		// Assignment creates a copy that shares allocation
+		var assignedCopy = original;
+		Assert.Equal(original.AllocationId, assignedCopy.AllocationId);
+
+		// Clone creates a copy with different allocation
+		var clonedCopy = original.Clone();
+		Assert.NotEqual(original.AllocationId, clonedCopy.AllocationId);
+
+		// Dispose original
+		original.Dispose();
+
+		// Assigned copy is now invalid (shared allocation was freed)
+		Assert.Throws<ArgumentException>(() => assignedCopy.AsSpan());
+
+		// Cloned copy is still valid (has its own allocation)
+		Assert.Equal("Compare Behaviors", clonedCopy.ToString());
+	}
+
+	/// <summary>
+	/// Test that Clone throws when pool is disposed
+	/// </summary>
+	[Fact]
+	public void Clone_DisposedPool_ThrowsObjectDisposedException() {
+		var pool = new UnmanagedStringPool(1024);
+		var str = pool.Allocate("Test String");
+
+		// Dispose the pool
+		pool.Dispose();
+
+		// Clone should throw ObjectDisposedException
+		Assert.Throws<ObjectDisposedException>(() => str.Clone());
+	}
+
+	/// <summary>
+	/// Test Clone with large strings
+	/// </summary>
+	[Fact]
+	public void Clone_LargeString_WorksCorrectly() {
+		using var pool = new UnmanagedStringPool(8192);
+		var largeContent = new string('X', 1000);
+		var original = pool.Allocate(largeContent);
+		var cloned = original.Clone();
+
+		// Should have same content but different allocations
+		Assert.Equal(largeContent, original.ToString());
+		Assert.Equal(largeContent, cloned.ToString());
+		Assert.NotEqual(original.AllocationId, cloned.AllocationId);
+
+		// Both should be independent
+		original.Dispose();
+		Assert.Throws<ArgumentException>(() => original.AsSpan());
+		Assert.Equal(largeContent, cloned.ToString());
+	}
 }
