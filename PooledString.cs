@@ -24,6 +24,35 @@ using System.Collections.Generic;
 /// <summary>
 /// Value type representing a string allocated from an unmanaged pool. Just a reference and an allocation ID, 12 bytes total.
 /// </summary>
+/// <remarks>
+/// <para><b>Copy Behavior and Disposal:</b></para>
+/// <para>
+/// PooledString is a value type (struct) with reference semantics for the underlying memory.
+/// When you copy a PooledString (e.g., via assignment), both the original and the copy share
+/// the same allocation ID and point to the same memory in the pool.
+/// </para>
+/// <para>
+/// <b>Important:</b> Disposing any copy invalidates ALL copies of that PooledString.
+/// This is because disposal removes the allocation from the pool's internal tracking,
+/// making the allocation ID invalid for all structs that reference it.
+/// </para>
+/// <example>
+/// <code>
+/// var original = pool.Allocate("Hello");
+/// var copy = original;  // Both share the same allocation
+///
+/// original.Dispose();    // Frees the allocation
+/// // Now BOTH original and copy are invalid:
+/// copy.AsSpan();        // Throws ArgumentException
+/// original.AsSpan();    // Also throws ArgumentException
+/// </code>
+/// </example>
+/// <para>
+/// This behavior mirrors unmanaged memory semantics where freeing memory invalidates
+/// all pointers to it. Multiple disposals are safe (idempotent) - calling Dispose()
+/// on an already-freed PooledString has no effect.
+/// </para>
+/// </remarks>
 [System.Diagnostics.DebuggerDisplay("{ToString(),nq}")]
 public readonly record struct PooledString(UnmanagedStringPool Pool, uint AllocationId) : IDisposable
 {
@@ -52,6 +81,12 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	/// <summary>
 	/// Free this string's memory back to the pool. This doesn't mutate the actual PooledString fields, it just updates the underlying pool
 	/// </summary>
+	/// <remarks>
+	/// <b>Warning:</b> This invalidates ALL copies of this PooledString, not just this instance.
+	/// Since PooledString is a value type, copies share the same allocation ID. Freeing any copy
+	/// removes the allocation from the pool, making all copies invalid.
+	/// Multiple calls to Free() on the same or different copies are safe (idempotent).
+	/// </remarks>
 	public readonly void Free() => Pool?.FreeString(AllocationId);
 
 	/// <summary>
@@ -395,5 +430,9 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	/// <summary>
 	/// Free the string back to the pool, if it is not empty
 	/// </summary>
+	/// <remarks>
+	/// <b>Warning:</b> This invalidates ALL copies of this PooledString, not just this instance.
+	/// See <see cref="Free"/> for details about copy behavior.
+	/// </remarks>
 	public void Dispose() => Free();
 }
