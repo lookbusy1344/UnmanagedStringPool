@@ -95,10 +95,10 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	/// <returns>A new PooledString with the same content but a different allocation ID</returns>
 	/// <remarks>
 	/// Unlike simple assignment which creates copies that share the same allocation,
-	/// Clone() allocates new memory in the pool for an independent copy.
-	/// The cloned string will not be affected if the original is disposed, and vice versa.
+	/// Duplicate() allocates new memory in the pool for an independent copy.
+	/// The duplicated string will not be affected if the original is disposed, and vice versa.
 	/// </remarks>
-	public readonly PooledString Clone()
+	public readonly PooledString Duplicate()
 	{
 		if (AllocationId == UnmanagedStringPool.EmptyStringAllocationId) {
 			// Empty strings don't need actual cloning, just return the same empty reference
