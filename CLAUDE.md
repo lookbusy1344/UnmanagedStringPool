@@ -99,3 +99,7 @@ The project uses strict .editorconfig settings with:
 - Opening braces on same line for control blocks
 - File-scoped namespaces
 - Extensive analyzer rules for design, performance, reliability, and usage
+
+### Naming Conventions
+
+- Test namespace should always be "LookBusy.Test"
