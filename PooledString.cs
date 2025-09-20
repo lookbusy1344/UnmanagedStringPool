@@ -24,6 +24,50 @@ using System.Collections.Generic;
 /// <summary>
 /// Value type representing a string allocated from an unmanaged pool. Just a reference and an allocation ID, 12 bytes total.
 /// </summary>
+/// <remarks>
+/// <para><b>Copy Behavior and Disposal:</b></para>
+/// <para>
+/// PooledString is a value type (struct) with reference semantics for the underlying memory.
+/// When you copy a PooledString (e.g., via assignment), both the original and the copy share
+/// the same allocation ID and point to the same memory in the pool.
+/// </para>
+/// <para>
+/// <b>Important:</b> Disposing any copy invalidates ALL copies of that PooledString.
+/// This is because disposal removes the allocation from the pool's internal tracking,
+/// making the allocation ID invalid for all structs that reference it.
+/// </para>
+/// <example>
+/// <code>
+/// var original = pool.Allocate("Hello");
+/// var copy = original;  // Both share the same allocation
+///
+/// original.Dispose();    // Frees the allocation
+/// // Now BOTH original and copy are invalid:
+/// copy.AsSpan();        // Throws ArgumentException
+/// original.AsSpan();    // Also throws ArgumentException
+/// </code>
+/// </example>
+/// This behavior mirrors unmanaged memory semantics where freeing memory invalidates
+/// all pointers to it. Multiple disposals are safe (idempotent) - calling Dispose()
+/// on an already-freed PooledString has no effect.
+/// </para>
+/// <para>
+/// <b>Warning - Memory Leaks:</b> Reassigning a PooledString variable without first
+/// calling Dispose() will leak the original allocation. The original memory remains
+/// allocated in the pool but becomes unreferenced and inaccessible.
+/// </para>
+/// <example>
+/// <code>
+/// var str = pool.Allocate("Original");
+/// str = pool.Allocate("New");  // LEAK: "Original" is now unreferenced but still allocated
+///
+/// // Correct approach:
+/// var str = pool.Allocate("Original");
+/// str.Dispose();                // Free the original allocation first
+/// str = pool.Allocate("New");   // Now safe to reassign
+/// </code>
+/// </example>
+/// </remarks>
 [System.Diagnostics.DebuggerDisplay("{ToString(),nq}")]
 public readonly record struct PooledString(UnmanagedStringPool Pool, uint AllocationId) : IDisposable
 {
@@ -52,7 +96,36 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	/// <summary>
 	/// Free this string's memory back to the pool. This doesn't mutate the actual PooledString fields, it just updates the underlying pool
 	/// </summary>
+	/// <remarks>
+	/// <b>Warning:</b> This invalidates ALL copies of this PooledString, not just this instance.
+	/// Since PooledString is a value type, copies share the same allocation ID. Freeing any copy
+	/// removes the allocation from the pool, making all copies invalid.
+	/// Multiple calls to Free() on the same or different copies are safe (idempotent).
+	/// </remarks>
 	public readonly void Free() => Pool?.FreeString(AllocationId);
+
+	/// <summary>
+	/// Creates a deep copy of this PooledString with a new allocation ID.
+	/// </summary>
+	/// <returns>A new PooledString with the same content but a different allocation ID</returns>
+	/// <remarks>
+	/// Unlike simple assignment which creates copies that share the same allocation,
+	/// Duplicate() allocates new memory in the pool for an independent copy.
+	/// The duplicated string will not be affected if the original is disposed, and vice versa.
+	/// </remarks>
+	public readonly PooledString Duplicate()
+	{
+		if (AllocationId == UnmanagedStringPool.EmptyStringAllocationId) {
+			// Empty strings don't need actual cloning, just return the same empty reference
+			return this;
+		}
+
+		CheckDisposed();
+
+		// Allocate new memory in the pool with the same content
+		var span = AsSpan();
+		return Pool.Allocate(span);
+	}
 
 	/// <summary>
 	/// Allocate a new PooledString with the given value at the specified position. Old PooledString is unchanged.
@@ -395,5 +468,9 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	/// <summary>
 	/// Free the string back to the pool, if it is not empty
 	/// </summary>
+	/// <remarks>
+	/// <b>Warning:</b> This invalidates ALL copies of this PooledString, not just this instance.
+	/// See <see cref="Free"/> for details about copy behavior.
+	/// </remarks>
 	public void Dispose() => Free();
 }
