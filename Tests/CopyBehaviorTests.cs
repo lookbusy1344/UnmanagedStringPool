@@ -1,4 +1,4 @@
-namespace LookBusy.Tests;
+namespace LookBusy.Test;
 
 using Xunit;
 
