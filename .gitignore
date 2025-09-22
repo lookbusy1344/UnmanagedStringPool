@@ -4,7 +4,7 @@ obj/
 *.DotSettings.user
 .DS_Store
 copilotDiffState.xml
-copilot.data.migration.*.xml
+copilot.data.*.xml
 *.bak
 TestResults/
 *.trx
