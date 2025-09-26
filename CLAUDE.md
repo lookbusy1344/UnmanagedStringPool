@@ -91,6 +91,7 @@ dotnet format --verify-no-changes
 - **FinalizerBehaviorTests.cs**: Finalizer and GC interaction tests
 - **ClearMethodTests.cs**: Pool clearing operations
 - **IntegerOverflowTests.cs**: Overflow protection and boundary conditions
+- **CopyBehaviorTests.cs**: Copy semantics and behavior validation
 
 ## Code Style
 
