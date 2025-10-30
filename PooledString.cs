@@ -47,6 +47,7 @@ using System.Collections.Generic;
 /// original.AsSpan();    // Also throws ArgumentException
 /// </code>
 /// </example>
+/// <para>
 /// This behavior mirrors unmanaged memory semantics where freeing memory invalidates
 /// all pointers to it. Multiple disposals are safe (idempotent) - calling Dispose()
 /// on an already-freed PooledString has no effect.
@@ -399,8 +400,8 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 
 		if (span.Length <= maxChars) {
 			// Hash all characters using for loop to avoid allocation
-			for (var i = 0; i < span.Length; i++) {
-				hash.Add(span[i]);
+			foreach (var t in span) {
+				hash.Add(t);
 			}
 		} else {
 			// Hash first fragment chars
