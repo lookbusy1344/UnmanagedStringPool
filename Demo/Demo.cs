@@ -52,7 +52,7 @@ public static class StringDemo
 
 		// Demonstrate substring operation
 		var substr = str5.SubstringSpan(2, 6);
-		Console.Out.WriteLine(substr); // llo Be
+		Console.WriteLine(substr); // llo Be
 
 		// Demonstrate replace operation
 		var replaced = str5.Replace("Beautiful", "Wonderful");
@@ -83,7 +83,7 @@ public static class StringDemo
 		Console.WriteLine($"Buffer dump: \"{pool.DumpBufferAsString()}\"");
 	}
 
-	private static void WriteLine(PooledString str) => Console.Out.WriteLine(str.AsSpan());
+	private static void WriteLine(PooledString str) => Console.WriteLine(str.AsSpan());
 
 	private static string RandomString(int length)
 	{
