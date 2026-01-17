@@ -1,70 +1,92 @@
 {
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "label": "build",
-      "command": "dotnet",
-      "type": "process",
-      "args": [
-        "build",
-        "${workspaceFolder}/UnmanagedStringPool.sln",
-        "/property:GenerateFullPaths=true",
-        "/consoleloggerparameters:NoSummary;ForceNoAlign"
-      ],
-      "problemMatcher": "$msCompile",
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      }
-    },
-    {
-      "label": "test",
-      "command": "dotnet",
-      "type": "process",
-      "args": [
-        "test",
-        "${workspaceFolder}/Tests/StringPoolTest.csproj",
-        "/property:GenerateFullPaths=true",
-        "/consoleloggerparameters:NoSummary;ForceNoAlign"
-      ],
-      "problemMatcher": "$msCompile",
-      "group": {
-        "kind": "test",
-        "isDefault": true
-      }
-    },
-    {
-      "label": "clean",
-      "command": "dotnet",
-      "type": "process",
-      "args": [
-        "clean",
-        "${workspaceFolder}/UnmanagedStringPool.sln",
-        "/property:GenerateFullPaths=true",
-        "/consoleloggerparameters:NoSummary;ForceNoAlign"
-      ],
-      "problemMatcher": "$msCompile"
-    },
-    {
-      "label": "format",
-      "command": "dotnet",
-      "type": "process",
-      "args": [
-        "format",
-        "${workspaceFolder}/UnmanagedStringPool.sln"
-      ],
-      "problemMatcher": []
-    },
-    {
-      "label": "format (with analyzers)",
-      "command": "dotnet",
-      "type": "process",
-      "args": [
-        "format",
-        "analyzers",
-        "${workspaceFolder}/UnmanagedStringPool.sln"
-      ],
-      "problemMatcher": []
-    }
-  ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build",
+			"command": "dotnet",
+			"type": "process",
+			"args": [
+				"build",
+				"${workspaceFolder}/UnmanagedStringPool.sln",
+				"/property:GenerateFullPaths=true",
+				"/consoleloggerparameters:NoSummary;ForceNoAlign"
+			],
+			"problemMatcher": "$msCompile",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		},
+		{
+			"label": "test",
+			"command": "dotnet",
+			"type": "process",
+			"args": [
+				"test",
+				"${workspaceFolder}/Tests/StringPoolTest.csproj",
+				"/property:GenerateFullPaths=true",
+				"/consoleloggerparameters:NoSummary;ForceNoAlign"
+			],
+			"problemMatcher": "$msCompile",
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			}
+		},
+		{
+			"label": "clean",
+			"command": "dotnet",
+			"type": "process",
+			"args": [
+				"clean",
+				"${workspaceFolder}/UnmanagedStringPool.sln",
+				"/property:GenerateFullPaths=true",
+				"/consoleloggerparameters:NoSummary;ForceNoAlign"
+			],
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "format",
+			"command": "dotnet",
+			"type": "process",
+			"args": [
+				"format",
+				"${workspaceFolder}/UnmanagedStringPool.sln"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "format (with analyzers)",
+			"command": "dotnet",
+			"type": "process",
+			"args": [
+				"format",
+				"analyzers",
+				"${workspaceFolder}/UnmanagedStringPool.sln"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "package update - demo",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"package",
+				"update",
+				"--project",
+				"Demo/StringPoolDemo.csproj"
+			]
+		},
+		{
+			"label": "package update - tests",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"package",
+				"update",
+				"--project",
+				"Tests/StringPoolTest.csproj"
+			]
+		}
+	]
 }
