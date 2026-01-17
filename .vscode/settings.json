@@ -1,0 +1,12 @@
+{
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit",
+        "source.organizeImports": "explicit"
+    },
+    "files.exclude": {
+        "**/bin": true,
+        "**/obj": true
+    },
+    "dotnet.defaultSolution": "UnmanagedStringPool.sln"
+}
