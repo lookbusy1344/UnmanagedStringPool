@@ -29,8 +29,8 @@ public class DisposalAndLifecycleTests
 		pool.Dispose();
 
 		Assert.True(pool.IsDisposed);
-		Assert.Throws<ObjectDisposedException>(() => str1.AsSpan());
-		Assert.Throws<ObjectDisposedException>(() => str2.ToString());
+		_ = Assert.Throws<ObjectDisposedException>(() => str1.AsSpan());
+		_ = Assert.Throws<ObjectDisposedException>(() => str2.ToString());
 	}
 
 	[Fact]
@@ -59,7 +59,7 @@ public class DisposalAndLifecycleTests
 		}
 
 		Assert.True(pool.IsDisposed);
-		Assert.Throws<ObjectDisposedException>(() => str.AsSpan());
+		_ = Assert.Throws<ObjectDisposedException>(() => str.AsSpan());
 	}
 
 	#endregion
@@ -72,8 +72,8 @@ public class DisposalAndLifecycleTests
 		var pool = new UnmanagedStringPool(1024);
 		pool.Dispose();
 
-		Assert.Throws<ObjectDisposedException>(() => pool.Allocate("test"));
-		Assert.Throws<ObjectDisposedException>(() => pool.Allocate("test".AsSpan()));
+		_ = Assert.Throws<ObjectDisposedException>(() => pool.Allocate("test"));
+		_ = Assert.Throws<ObjectDisposedException>(() => pool.Allocate("test".AsSpan()));
 	}
 
 	[Fact]
@@ -82,7 +82,7 @@ public class DisposalAndLifecycleTests
 		var pool = new UnmanagedStringPool(1024);
 		pool.Dispose();
 
-		Assert.Throws<ObjectDisposedException>(() => pool.DefragmentAndGrowPool(100));
+		_ = Assert.Throws<ObjectDisposedException>(() => pool.DefragmentAndGrowPool(100));
 	}
 
 	[Fact]
@@ -91,7 +91,7 @@ public class DisposalAndLifecycleTests
 		var pool = new UnmanagedStringPool(1024);
 		pool.Dispose();
 
-		Assert.Throws<ObjectDisposedException>(() => pool.DumpBufferAsString());
+		_ = Assert.Throws<ObjectDisposedException>(() => pool.DumpBufferAsString());
 	}
 
 	[Fact]
@@ -119,17 +119,17 @@ public class DisposalAndLifecycleTests
 
 		pool.Dispose();
 
-		Assert.Throws<ObjectDisposedException>(() => str.AsSpan());
-		Assert.Throws<ObjectDisposedException>(() => str.ToString());
-		Assert.Throws<ObjectDisposedException>(() => str.Length);
-		Assert.Throws<ObjectDisposedException>(() => str.IsEmpty);
-		Assert.Throws<ObjectDisposedException>(() => str.Insert(0, "test"));
-		Assert.Throws<ObjectDisposedException>(() => str.Replace("Hello", "Hi"));
-		Assert.Throws<ObjectDisposedException>(() => str.IndexOf("World"));
-		Assert.Throws<ObjectDisposedException>(() => str.Contains("World"));
-		Assert.Throws<ObjectDisposedException>(() => str.StartsWith("Hello"));
-		Assert.Throws<ObjectDisposedException>(() => str.EndsWith("World"));
-		Assert.Throws<ObjectDisposedException>(() => str.SubstringSpan(0, 5));
+		_ = Assert.Throws<ObjectDisposedException>(() => str.AsSpan());
+		_ = Assert.Throws<ObjectDisposedException>(() => str.ToString());
+		_ = Assert.Throws<ObjectDisposedException>(() => str.Length);
+		_ = Assert.Throws<ObjectDisposedException>(() => str.IsEmpty);
+		_ = Assert.Throws<ObjectDisposedException>(() => str.Insert(0, "test"));
+		_ = Assert.Throws<ObjectDisposedException>(() => str.Replace("Hello", "Hi"));
+		_ = Assert.Throws<ObjectDisposedException>(() => str.IndexOf("World"));
+		_ = Assert.Throws<ObjectDisposedException>(() => str.Contains("World"));
+		_ = Assert.Throws<ObjectDisposedException>(() => str.StartsWith("Hello"));
+		_ = Assert.Throws<ObjectDisposedException>(() => str.EndsWith("World"));
+		_ = Assert.Throws<ObjectDisposedException>(() => str.SubstringSpan(0, 5));
 	}
 
 	[Fact]
@@ -224,9 +224,9 @@ public class DisposalAndLifecycleTests
 
 		str.Free();
 
-		Assert.Throws<ArgumentException>(() => str.AsSpan());
-		Assert.Throws<ArgumentException>(() => str.ToString());
-		Assert.Throws<ArgumentException>(() => str.Length);
+		_ = Assert.Throws<ArgumentException>(() => str.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => str.ToString());
+		_ = Assert.Throws<ArgumentException>(() => str.Length);
 	}
 
 	#endregion
@@ -306,7 +306,7 @@ public class DisposalAndLifecycleTests
 
 		// All remaining strings should become invalid
 		for (var i = 5; i < 10; i++) {
-			Assert.Throws<ObjectDisposedException>(() => strings[i].AsSpan());
+			_ = Assert.Throws<ObjectDisposedException>(() => strings[i].AsSpan());
 		}
 
 		// Already freed strings should remain safely freed
@@ -335,8 +335,8 @@ public class DisposalAndLifecycleTests
 		// Pool disposal should invalidate all
 		pool.Dispose();
 
-		Assert.Throws<ObjectDisposedException>(() => original.AsSpan());
-		Assert.Throws<ObjectDisposedException>(() => result2.AsSpan());
+		_ = Assert.Throws<ObjectDisposedException>(() => original.AsSpan());
+		_ = Assert.Throws<ObjectDisposedException>(() => result2.AsSpan());
 	}
 
 	[Fact]
@@ -385,7 +385,7 @@ public class DisposalAndLifecycleTests
 		str.Free();
 
 		// Original should be invalid
-		Assert.Throws<ArgumentException>(() => str.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => str.AsSpan());
 
 		// Modified should still be valid
 		Assert.Equal("Start Lifecycle Test", modified.ToString());
@@ -394,8 +394,8 @@ public class DisposalAndLifecycleTests
 		modified.Free();
 
 		// Both should be invalid now
-		Assert.Throws<ArgumentException>(() => str.Length);
-		Assert.Throws<ArgumentException>(() => modified.Length);
+		_ = Assert.Throws<ArgumentException>(() => str.Length);
+		_ = Assert.Throws<ArgumentException>(() => modified.Length);
 	}
 
 	[Fact]
@@ -426,7 +426,7 @@ public class DisposalAndLifecycleTests
 		// After disposal
 		pool.Dispose();
 		Assert.True(pool.IsDisposed);
-		Assert.Throws<ObjectDisposedException>(() => str2.AsSpan());
+		_ = Assert.Throws<ObjectDisposedException>(() => str2.AsSpan());
 	}
 
 	#endregion

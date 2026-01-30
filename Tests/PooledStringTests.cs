@@ -73,7 +73,7 @@ public sealed class PooledStringTests : IDisposable
 	{
 		var str = pool.Allocate("Hello");
 
-		Assert.Throws<ArgumentOutOfRangeException>(() => str.Insert(position, "test"));
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() => str.Insert(position, "test"));
 	}
 
 	[Fact]
@@ -81,7 +81,7 @@ public sealed class PooledStringTests : IDisposable
 	{
 		var empty = pool.CreateEmptyString();
 
-		Assert.Throws<ArgumentOutOfRangeException>(() => empty.Insert(1, "test"));
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() => empty.Insert(1, "test"));
 	}
 
 	[Fact]
@@ -389,7 +389,7 @@ public sealed class PooledStringTests : IDisposable
 	{
 		var str = pool.Allocate("Hello World");
 
-		Assert.Throws<ArgumentOutOfRangeException>(() => str.SubstringSpan(start, length));
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() => str.SubstringSpan(start, length));
 	}
 
 	#endregion
@@ -422,7 +422,7 @@ public sealed class PooledStringTests : IDisposable
 		var str = pool.Allocate("Hello");
 		str.Free();
 
-		Assert.Throws<ArgumentException>(() => str.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => str.AsSpan());
 	}
 
 	#endregion
@@ -512,7 +512,7 @@ public sealed class PooledStringTests : IDisposable
 
 		// Collect unique hash codes
 		foreach (var str in strings) {
-			hashes.Add(str.GetHashCode());
+			_ = hashes.Add(str.GetHashCode());
 		}
 
 		// Expect at least 80% unique hashes (allowing for some collisions)

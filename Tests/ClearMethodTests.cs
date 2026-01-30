@@ -53,7 +53,7 @@ public sealed class ClearMethodTests : IDisposable
 	public void Clear_MultipleTimes_DoesNotThrow()
 	{
 		// Arrange
-		pool.Allocate("Test");
+		_ = pool.Allocate("Test");
 
 		// Act & Assert - should not throw
 		pool.Clear();
@@ -78,9 +78,9 @@ public sealed class ClearMethodTests : IDisposable
 		pool.Clear();
 
 		// Assert - accessing old string should throw
-		Assert.Throws<ArgumentException>(() => str.ToString());
-		Assert.Throws<ArgumentException>(() => str.Length);
-		Assert.Throws<ArgumentException>(() => str.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => str.ToString());
+		_ = Assert.Throws<ArgumentException>(() => str.Length);
+		_ = Assert.Throws<ArgumentException>(() => str.AsSpan());
 	}
 
 	[Fact]
@@ -95,7 +95,7 @@ public sealed class ClearMethodTests : IDisposable
 		pool.Clear();
 
 		// Assert - PooledString comparisons throw when accessing cleared strings
-		Assert.Throws<ArgumentException>(() => str1.Equals(str2));
+		_ = Assert.Throws<ArgumentException>(() => str1.Equals(str2));
 
 		// Object.Equals doesn't throw, it just returns false
 		Assert.False(str1.Equals((object)"Test"));
@@ -111,12 +111,12 @@ public sealed class ClearMethodTests : IDisposable
 		pool.Clear();
 
 		// Assert - string operations should throw
-		Assert.Throws<ArgumentException>(() => str.IndexOf("o".AsSpan()));
-		Assert.Throws<ArgumentException>(() => str.IndexOf("World".AsSpan()));
-		Assert.Throws<ArgumentException>(() => str.LastIndexOf("o".AsSpan()));
-		Assert.Throws<ArgumentException>(() => str.Contains("Hello"));
-		Assert.Throws<ArgumentException>(() => str.StartsWith("Hello"));
-		Assert.Throws<ArgumentException>(() => str.EndsWith("World"));
+		_ = Assert.Throws<ArgumentException>(() => str.IndexOf("o".AsSpan()));
+		_ = Assert.Throws<ArgumentException>(() => str.IndexOf("World".AsSpan()));
+		_ = Assert.Throws<ArgumentException>(() => str.LastIndexOf("o".AsSpan()));
+		_ = Assert.Throws<ArgumentException>(() => str.Contains("Hello"));
+		_ = Assert.Throws<ArgumentException>(() => str.StartsWith("Hello"));
+		_ = Assert.Throws<ArgumentException>(() => str.EndsWith("World"));
 	}
 
 	[Fact]
@@ -129,9 +129,9 @@ public sealed class ClearMethodTests : IDisposable
 		pool.Clear();
 
 		// Assert - manipulations should throw
-		Assert.Throws<ArgumentException>(() => str.SubstringSpan(0, 5));
-		Assert.Throws<ArgumentException>(() => str.Replace("Hello", "Hi"));
-		Assert.Throws<ArgumentException>(() => str.Insert(5, " Beautiful"));
+		_ = Assert.Throws<ArgumentException>(() => str.SubstringSpan(0, 5));
+		_ = Assert.Throws<ArgumentException>(() => str.Replace("Hello", "Hi"));
+		_ = Assert.Throws<ArgumentException>(() => str.Insert(5, " Beautiful"));
 	}
 
 	[Fact]
@@ -228,7 +228,7 @@ public sealed class ClearMethodTests : IDisposable
 	{
 		// Arrange
 		var initialFreeSpace = pool.FreeSpaceChars;
-		pool.Allocate("This takes up some space");
+		_ = pool.Allocate("This takes up some space");
 		var afterAllocation = pool.FreeSpaceChars;
 		Assert.True(afterAllocation < initialFreeSpace);
 
@@ -247,7 +247,7 @@ public sealed class ClearMethodTests : IDisposable
 	public void Clear_BufferDumpShowsEmpty()
 	{
 		// Arrange
-		pool.Allocate("Some content");
+		_ = pool.Allocate("Some content");
 		Assert.NotEqual(string.Empty, pool.DumpBufferAsString());
 
 		// Act
@@ -290,11 +290,11 @@ public sealed class ClearMethodTests : IDisposable
 	public void Clear_WithMixedSizeAllocations_ResetsCorrectly()
 	{
 		// Arrange - allocate strings of various sizes
-		pool.Allocate("A");
-		pool.Allocate("Medium string");
-		pool.Allocate("A much longer string that takes up more space in the pool");
-		pool.Allocate("");
-		pool.Allocate("Another medium one");
+		_ = pool.Allocate("A");
+		_ = pool.Allocate("Medium string");
+		_ = pool.Allocate("A much longer string that takes up more space in the pool");
+		_ = pool.Allocate("");
+		_ = pool.Allocate("Another medium one");
 
 		// Act
 		pool.Clear();
@@ -312,7 +312,7 @@ public sealed class ClearMethodTests : IDisposable
 		tempPool.Dispose();
 
 		// Act & Assert
-		Assert.Throws<ObjectDisposedException>(() => tempPool.Clear());
+		_ = Assert.Throws<ObjectDisposedException>(() => tempPool.Clear());
 	}
 
 	#endregion
@@ -331,7 +331,7 @@ public sealed class ClearMethodTests : IDisposable
 		var task = Task.Run(() => {
 			// Wait for clear to be executed
 			while (!clearExecuted) {
-				Thread.Yield();
+				_ = Thread.Yield();
 			}
 
 			try {

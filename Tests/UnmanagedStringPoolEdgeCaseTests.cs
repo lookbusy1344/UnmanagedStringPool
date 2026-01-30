@@ -123,7 +123,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 		var str1 = pool.Allocate("12345");
 
 		// This should exceed capacity and throw
-		Assert.Throws<OutOfMemoryException>(() => pool.Allocate("This string is definitely too long"));
+		_ = Assert.Throws<OutOfMemoryException>(() => pool.Allocate("This string is definitely too long"));
 	}
 
 	[Fact]
@@ -144,7 +144,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 	{
 		using var pool = new UnmanagedStringPool(1024);
 
-		Assert.Throws<ArgumentOutOfRangeException>(() => pool.DefragmentAndGrowPool(int.MaxValue));
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() => pool.DefragmentAndGrowPool(int.MaxValue));
 	}
 
 	[Fact]
@@ -152,7 +152,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 	{
 		using var pool = new UnmanagedStringPool(1024);
 
-		Assert.Throws<ArgumentOutOfRangeException>(() => pool.DefragmentAndGrowPool(int.MaxValue - 1000));
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() => pool.DefragmentAndGrowPool(int.MaxValue - 1000));
 	}
 
 	#endregion
@@ -169,7 +169,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 		pool.Dispose(); // Second dispose should not throw
 		pool.Dispose(); // Third dispose should not throw
 
-		Assert.Throws<ObjectDisposedException>(() => str.AsSpan());
+		_ = Assert.Throws<ObjectDisposedException>(() => str.AsSpan());
 	}
 
 	[Fact]
@@ -180,12 +180,12 @@ public class UnmanagedStringPoolEdgeCaseTests
 
 		pool.Dispose();
 
-		Assert.Throws<ObjectDisposedException>(() => str.AsSpan());
-		Assert.Throws<ObjectDisposedException>(() => str.Length);
-		Assert.Throws<ObjectDisposedException>(() => str.ToString());
-		Assert.Throws<ObjectDisposedException>(() => str.Insert(0, "x"));
-		Assert.Throws<ObjectDisposedException>(() => str.Replace("T", "t"));
-		Assert.Throws<ObjectDisposedException>(() => str.SubstringSpan(0, 1));
+		_ = Assert.Throws<ObjectDisposedException>(() => str.AsSpan());
+		_ = Assert.Throws<ObjectDisposedException>(() => str.Length);
+		_ = Assert.Throws<ObjectDisposedException>(() => str.ToString());
+		_ = Assert.Throws<ObjectDisposedException>(() => str.Insert(0, "x"));
+		_ = Assert.Throws<ObjectDisposedException>(() => str.Replace("T", "t"));
+		_ = Assert.Throws<ObjectDisposedException>(() => str.SubstringSpan(0, 1));
 	}
 
 	[Fact]
@@ -226,7 +226,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 		var largeReplacement = new string('X', 100_000);
 
 		// This should fail when trying to allocate in a non-growing pool
-		Assert.ThrowsAny<Exception>(() => str.Replace("a", largeReplacement));
+		_ = Assert.ThrowsAny<Exception>(() => str.Replace("a", largeReplacement));
 	}
 
 	[Fact]
@@ -276,7 +276,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 		using var pool = new UnmanagedStringPool(1024);
 		var str = pool.Allocate("Hello");
 
-		Assert.Throws<ArgumentOutOfRangeException>(() => str.SubstringSpan(0, -1));
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() => str.SubstringSpan(0, -1));
 	}
 
 	#endregion
@@ -341,7 +341,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 		try {
 			// Try to fill the pool completely
 			while (true) {
-				pool.Allocate("XXXX");
+				_ = pool.Allocate("XXXX");
 			}
 		}
 		catch (OutOfMemoryException) {
@@ -385,8 +385,8 @@ public class UnmanagedStringPoolEdgeCaseTests
 		using var pool = new UnmanagedStringPool(1024);
 
 		// Test various invalid IDs
-		Assert.Throws<ArgumentException>(() => pool.GetAllocationInfo(999999));
-		Assert.Throws<ArgumentException>(() => pool.GetAllocationInfo(uint.MaxValue));
+		_ = Assert.Throws<ArgumentException>(() => pool.GetAllocationInfo(999999));
+		_ = Assert.Throws<ArgumentException>(() => pool.GetAllocationInfo(uint.MaxValue));
 	}
 
 	[Fact]
@@ -405,9 +405,9 @@ public class UnmanagedStringPoolEdgeCaseTests
 		using var pool = new UnmanagedStringPool(1024);
 		var invalidStr = new PooledString(pool, 999999);
 
-		Assert.Throws<ArgumentException>(() => invalidStr.AsSpan());
-		Assert.Throws<ArgumentException>(() => invalidStr.Length);
-		Assert.Throws<ArgumentException>(() => invalidStr.ToString());
+		_ = Assert.Throws<ArgumentException>(() => invalidStr.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => invalidStr.Length);
+		_ = Assert.Throws<ArgumentException>(() => invalidStr.ToString());
 	}
 
 	#endregion
@@ -455,7 +455,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 	{
 		using var pool = new UnmanagedStringPool(1024);
 
-		Assert.Throws<ArgumentOutOfRangeException>(() => pool.Allocate(length));
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() => pool.Allocate(length));
 	}
 
 	[Fact]
@@ -467,7 +467,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 		// Create a scenario where the replacement will fail due to insufficient space
 		var hugeReplacement = new string('X', 100_000);
 
-		Assert.ThrowsAny<Exception>(() => str.Replace("a", hugeReplacement));
+		_ = Assert.ThrowsAny<Exception>(() => str.Replace("a", hugeReplacement));
 	}
 
 	#endregion
@@ -489,7 +489,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 	public void EmptyStringPool_GetAllocationInfo_InvalidId_ThrowsArgumentException()
 	{
 		using var pool = new UnmanagedStringPool(1024);
-		Assert.Throws<ArgumentException>(() =>
+		_ = Assert.Throws<ArgumentException>(() =>
 			pool.GetAllocationInfo(uint.MaxValue));
 	}
 

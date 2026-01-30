@@ -46,7 +46,7 @@ public sealed class IntegerOverflowTests : IDisposable
 		// When initialCapacityChars * sizeof(char) would overflow int
 		var oversizedCapacity = (int.MaxValue / sizeof(char)) + 1;
 
-		Assert.ThrowsAny<Exception>(() => {
+		_ = Assert.ThrowsAny<Exception>(() => {
 			using var testPool = new UnmanagedStringPool(oversizedCapacity);
 		});
 	}
@@ -72,7 +72,7 @@ public sealed class IntegerOverflowTests : IDisposable
 		// This should either work or throw OutOfMemoryException, but not ArgumentOutOfRangeException
 		try {
 			using var testPool = new UnmanagedStringPool(maxSafeLength, false); // Disable growth
-			testPool.Allocate(maxSafeLength);
+			_ = testPool.Allocate(maxSafeLength);
 		}
 		catch (OutOfMemoryException) {
 			// Expected - not enough memory
@@ -88,7 +88,7 @@ public sealed class IntegerOverflowTests : IDisposable
 		// Test a length that would cause overflow when multiplied by sizeof(char) and aligned
 		var dangerousLength = int.MaxValue / sizeof(char);
 
-		Assert.Throws<ArgumentOutOfRangeException>(() => pool.Allocate(dangerousLength));
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() => pool.Allocate(dangerousLength));
 	}
 
 	#endregion
@@ -98,7 +98,7 @@ public sealed class IntegerOverflowTests : IDisposable
 	[Fact]
 	public void DefragmentAndGrowPool_AdditionCausesOverflow_ThrowsArgumentOutOfRangeException()
 	{
-		Assert.Throws<ArgumentOutOfRangeException>(() =>
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() =>
 			pool.DefragmentAndGrowPool(int.MaxValue));
 	}
 
@@ -110,7 +110,7 @@ public sealed class IntegerOverflowTests : IDisposable
 		// Adding this should cause overflow
 		var additionalBytes = int.MaxValue - 500;
 
-		Assert.Throws<ArgumentOutOfRangeException>(() =>
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() =>
 			testPool.DefragmentAndGrowPool(additionalBytes));
 	}
 
@@ -119,7 +119,7 @@ public sealed class IntegerOverflowTests : IDisposable
 	[InlineData(int.MaxValue)]
 	public void DefragmentAndGrowPool_ExactOverflowBoundary_ThrowsArgumentOutOfRangeException(int additionalBytes)
 	{
-		Assert.Throws<ArgumentOutOfRangeException>(() =>
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() =>
 			pool.DefragmentAndGrowPool(additionalBytes));
 	}
 
@@ -136,7 +136,7 @@ public sealed class IntegerOverflowTests : IDisposable
 		// This should cause overflow in AlignSize if not handled properly
 		var problematicLength = (int.MaxValue - 7) / sizeof(char);
 
-		Assert.Throws<ArgumentOutOfRangeException>(() => pool.Allocate(problematicLength));
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() => pool.Allocate(problematicLength));
 	}
 
 	[Fact]
@@ -149,7 +149,7 @@ public sealed class IntegerOverflowTests : IDisposable
 			// These should all throw due to memory constraints or overflow detection
 			try {
 				using var testPool = new UnmanagedStringPool(100, false); // Small pool
-				testPool.Allocate(lengthChars); // This should trigger overflow detection
+				_ = testPool.Allocate(lengthChars); // This should trigger overflow detection
 				Assert.Fail($"Expected exception for lengthChars: {lengthChars}");
 			}
 			catch (ArgumentOutOfRangeException) {
@@ -254,7 +254,7 @@ public sealed class IntegerOverflowTests : IDisposable
 	{
 		var str = pool.Allocate("Test");
 
-		Assert.Throws<ArgumentOutOfRangeException>(() => str.Insert(position, "X"));
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() => str.Insert(position, "X"));
 	}
 
 	[Theory]
@@ -264,7 +264,7 @@ public sealed class IntegerOverflowTests : IDisposable
 	{
 		var str = pool.Allocate("Test");
 
-		Assert.Throws<ArgumentOutOfRangeException>(() => str.SubstringSpan(startIndex, 1));
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() => str.SubstringSpan(startIndex, 1));
 	}
 
 	[Fact]
@@ -273,7 +273,7 @@ public sealed class IntegerOverflowTests : IDisposable
 		var str = pool.Allocate("Test");
 
 		// Length that would cause startIndex + length to overflow
-		Assert.Throws<ArgumentOutOfRangeException>(() =>
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() =>
 			str.SubstringSpan(1, int.MaxValue));
 	}
 
@@ -287,10 +287,10 @@ public sealed class IntegerOverflowTests : IDisposable
 		var str = pool.Allocate("Test");
 
 		// This would cause start * sizeof(char) to overflow in IntPtr.Add
-		Assert.Throws<ArgumentOutOfRangeException>(() => {
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() => {
 			// We can't directly call SetAtPosition as it's private, but Insert uses it
 			// Insert with position that would cause overflow in SetAtPosition
-			str.Insert(int.MaxValue / 2, "X");
+			_ = str.Insert(int.MaxValue / 2, "X");
 		});
 	}
 

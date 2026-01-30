@@ -178,7 +178,7 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 		var str1 = smallPool.Allocate("12345");
 
 		// This should throw since growth is disabled and pool is nearly full
-		Assert.Throws<OutOfMemoryException>(() => smallPool.Allocate("This string is too long for remaining space"));
+		_ = Assert.Throws<OutOfMemoryException>(() => smallPool.Allocate("This string is too long for remaining space"));
 	}
 
 	[Fact]
@@ -205,7 +205,7 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 		var testPool = new UnmanagedStringPool(512);
 		testPool.Dispose();
 
-		Assert.Throws<ObjectDisposedException>(() => testPool.Allocate("test"));
+		_ = Assert.Throws<ObjectDisposedException>(() => testPool.Allocate("test"));
 	}
 
 	[Fact]
@@ -215,7 +215,7 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 		var str = testPool.Allocate("test");
 		testPool.Dispose();
 
-		Assert.Throws<ObjectDisposedException>(() => str.AsSpan());
+		_ = Assert.Throws<ObjectDisposedException>(() => str.AsSpan());
 	}
 
 	[Fact]
@@ -245,7 +245,7 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 		var testPool = new UnmanagedStringPool(512);
 		testPool.Dispose();
 
-		Assert.Throws<ObjectDisposedException>(() => testPool.DumpBufferAsString());
+		_ = Assert.Throws<ObjectDisposedException>(() => testPool.DumpBufferAsString());
 	}
 
 	#endregion

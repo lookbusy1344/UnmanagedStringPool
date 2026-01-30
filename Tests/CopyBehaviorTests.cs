@@ -47,9 +47,9 @@ public class CopyBehaviorTests
 		original.Dispose();
 
 		// All copies should now be invalid
-		Assert.Throws<ArgumentException>(() => original.AsSpan());
-		Assert.Throws<ArgumentException>(() => copy1.AsSpan());
-		Assert.Throws<ArgumentException>(() => copy2.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => original.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => copy1.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => copy2.AsSpan());
 	}
 
 	/// <summary>
@@ -67,9 +67,9 @@ public class CopyBehaviorTests
 		copy1.Dispose();
 
 		// All instances should now be invalid
-		Assert.Throws<ArgumentException>(() => original.AsSpan());
-		Assert.Throws<ArgumentException>(() => copy1.AsSpan());
-		Assert.Throws<ArgumentException>(() => copy2.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => original.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => copy1.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => copy2.AsSpan());
 	}
 
 	/// <summary>
@@ -92,8 +92,8 @@ public class CopyBehaviorTests
 		copy.Free();         // Free the copy
 
 		// All should still be invalid
-		Assert.Throws<ArgumentException>(() => original.AsSpan());
-		Assert.Throws<ArgumentException>(() => copy.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => original.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => copy.AsSpan());
 	}
 
 	/// <summary>
@@ -141,8 +141,8 @@ public class CopyBehaviorTests
 		// Empty strings don't have actual allocations to invalidate
 		// But after pool disposal, operations requiring the pool will fail
 		pool.Dispose();
-		Assert.Throws<ObjectDisposedException>(() => empty1.Insert(0, "text"));
-		Assert.Throws<ObjectDisposedException>(() => empty2.Insert(0, "text"));
+		_ = Assert.Throws<ObjectDisposedException>(() => empty1.Insert(0, "text"));
+		_ = Assert.Throws<ObjectDisposedException>(() => empty2.Insert(0, "text"));
 	}
 
 	/// <summary>
@@ -189,7 +189,7 @@ public class CopyBehaviorTests
 		}
 
 		// After the using block, original is disposed, so copy is invalid
-		Assert.Throws<ArgumentException>(() => copyOutsideUsing.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => copyOutsideUsing.AsSpan());
 	}
 
 	/// <summary>
@@ -204,15 +204,15 @@ public class CopyBehaviorTests
 		var str1 = pool.Allocate("Test Free");
 		var copy1 = str1;
 		str1.Free();
-		Assert.Throws<ArgumentException>(() => str1.AsSpan());
-		Assert.Throws<ArgumentException>(() => copy1.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => str1.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => copy1.AsSpan());
 
 		// Test Dispose()
 		var str2 = pool.Allocate("Test Dispose");
 		var copy2 = str2;
 		str2.Dispose();
-		Assert.Throws<ArgumentException>(() => str2.AsSpan());
-		Assert.Throws<ArgumentException>(() => copy2.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => str2.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => copy2.AsSpan());
 	}
 
 	/// <summary>
@@ -268,8 +268,8 @@ public class CopyBehaviorTests
 
 		// Disposing either a or b invalidates both
 		b.Dispose();
-		Assert.Throws<ArgumentException>(() => a.AsSpan());
-		Assert.Throws<ArgumentException>(() => b.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => a.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => b.AsSpan());
 	}
 
 	/// <summary>
@@ -308,7 +308,7 @@ public class CopyBehaviorTests
 		Assert.Equal("Test Duplicate Independence", original.ToString());
 
 		// Duplicate should be invalid
-		Assert.Throws<ArgumentException>(() => cloned.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => cloned.AsSpan());
 	}
 
 	/// <summary>
@@ -328,7 +328,7 @@ public class CopyBehaviorTests
 		Assert.Equal("Another Independence Test", cloned.ToString());
 
 		// Original should be invalid
-		Assert.Throws<ArgumentException>(() => original.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => original.AsSpan());
 	}
 
 	/// <summary>
@@ -377,7 +377,7 @@ public class CopyBehaviorTests
 		// Disposing any one shouldn't affect the others
 		clone1.Dispose();
 		Assert.Equal("Multi Duplicate Test", original.ToString());
-		Assert.Throws<ArgumentException>(() => clone1.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => clone1.AsSpan());
 		Assert.Equal("Multi Duplicate Test", clone2.ToString());
 		Assert.Equal("Multi Duplicate Test", clone3.ToString());
 	}
@@ -403,7 +403,7 @@ public class CopyBehaviorTests
 		original.Dispose();
 
 		// Assigned copy is now invalid (shared allocation was freed)
-		Assert.Throws<ArgumentException>(() => assignedCopy.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => assignedCopy.AsSpan());
 
 		// Duplicated copy is still valid (has its own allocation)
 		Assert.Equal("Compare Behaviors", clonedCopy.ToString());
@@ -422,7 +422,7 @@ public class CopyBehaviorTests
 		pool.Dispose();
 
 		// Duplicate should throw ObjectDisposedException
-		Assert.Throws<ObjectDisposedException>(() => str.Duplicate());
+		_ = Assert.Throws<ObjectDisposedException>(() => str.Duplicate());
 	}
 
 	/// <summary>
@@ -443,7 +443,7 @@ public class CopyBehaviorTests
 
 		// Both should be independent
 		original.Dispose();
-		Assert.Throws<ArgumentException>(() => original.AsSpan());
+		_ = Assert.Throws<ArgumentException>(() => original.AsSpan());
 		Assert.Equal(largeContent, cloned.ToString());
 	}
 }

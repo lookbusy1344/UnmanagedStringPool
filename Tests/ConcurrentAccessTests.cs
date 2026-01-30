@@ -276,7 +276,7 @@ public sealed class ConcurrentAccessTests : IDisposable
 			});
 		}
 
-		await Task.WhenAll(tasks);
+		_ = await Task.WhenAll(tasks);
 
 		var allResults = tasks.SelectMany(t => t.Result).ToList();
 		Assert.Equal(4 * 15, allResults.Count);
