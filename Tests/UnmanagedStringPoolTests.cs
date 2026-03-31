@@ -268,8 +268,8 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 
 		var dump = pool.DumpBufferAsString();
 
-		Assert.Contains("Hello", dump);
-		Assert.Contains("World", dump);
+		Assert.Contains("Hello", dump, StringComparison.Ordinal);
+		Assert.Contains("World", dump, StringComparison.Ordinal);
 	}
 
 	[Fact]

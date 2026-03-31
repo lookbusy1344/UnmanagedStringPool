@@ -440,8 +440,8 @@ public class UnmanagedStringPoolEdgeCaseTests
 		var dump = pool.DumpBufferAsString();
 
 		// Only verify what we know should be there
-		Assert.Contains("World", dump);
-		Assert.Contains("Test!", dump);
+		Assert.Contains("World", dump, StringComparison.Ordinal);
+		Assert.Contains("Test!", dump, StringComparison.Ordinal);
 	}
 
 	#endregion
