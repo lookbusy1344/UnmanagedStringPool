@@ -2,7 +2,9 @@
 namespace LookBusy.Benchmarks;
 
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Jobs;
 
+[ShortRunJob]
 [MemoryDiagnoser]
 public class BulkAllocateBenchmarks
 {
