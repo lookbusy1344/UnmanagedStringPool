@@ -44,6 +44,8 @@
   <ItemGroup>
     <Compile Include="../UnmanagedStringPool.cs" />
     <Compile Include="../PooledString.cs" />
+    <Compile Include="../SegmentedStringPool.cs" />
+    <Compile Include="../PooledStringRef.cs" />
     <Compile Remove="../UnmanagedStringPoolDemo/**" />
   </ItemGroup>
 

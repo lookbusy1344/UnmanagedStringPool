@@ -36,6 +36,8 @@
   <ItemGroup>
     <Compile Include="../PooledString.cs" />
     <Compile Include="../UnmanagedStringPool.cs" />
+    <Compile Include="../SegmentedStringPool.cs" />
+    <Compile Include="../PooledStringRef.cs" />
   </ItemGroup>
 
 </Project>
