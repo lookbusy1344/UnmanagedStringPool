@@ -50,6 +50,8 @@
     <Compile Include="../SegmentedSlotTable.cs" />
     <Compile Include="../SegmentedSlab.cs" />
     <Compile Include="../SegmentedSlabTier.cs" />
+    <Compile Include="../SegmentedArenaSegment.cs" />
+    <Compile Include="../SegmentedArenaTier.cs" />
     <Compile Remove="../UnmanagedStringPoolDemo/**" />
   </ItemGroup>
 
