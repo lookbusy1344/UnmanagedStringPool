@@ -8,3 +8,4 @@ copilot.data.*.xml
 *.bak
 TestResults/
 *.trx
+BenchmarkDotNet.Artifacts/
