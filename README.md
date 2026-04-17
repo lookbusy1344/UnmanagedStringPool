@@ -152,17 +152,27 @@ For detailed information about the test suite and coverage areas, see [Tests/REA
 
 ## Benchmarks
 
-Two patterns measured against a managed string baseline, parameterised by N (1,000 / 10,000) and StringLength (8 / 256 chars). Full results in [docs/benchmarks.md](docs/benchmarks.md).
+Two patterns measured against a managed string baseline, parameterised by N (1,000 / 10,000) and StringLength (8 / 256 chars). Three implementations compared: **Managed** (baseline), **Legacy** (`UnmanagedStringPool`), **Segmented** (`SegmentedStringPool`). Full results in [docs/benchmarks.md](docs/benchmarks.md).
 
 **Large strings (256 chars) — key numbers:**
 
-| Scenario | N | Pooled vs managed (speed) | Gen0 reduction | Allocated reduction |
-|---|---|---|---|---|
-| Bulk allocate | 10,000 | **17% faster** | 7× fewer | 92% less |
-| Bulk allocate | 1,000 | 1.2× slower | 17× fewer | 94% less |
-| Interleaved alloc/free | 10,000 | 1.8× slower | 6× fewer | 84% less |
+| Scenario | N | Pool | Speed vs managed | Gen0 reduction | Alloc reduction |
+|---|---|---|---|---|---|
+| Bulk allocate | 10,000 | Legacy | **18% faster** | 2.9× | 92% |
+| Bulk allocate | 10,000 | Segmented | 1.2× slower | **4.3×** | **97%** |
+| Bulk allocate | 1,000 | Legacy | 1.2× slower | 17× | 94% |
+| Bulk allocate | 1,000 | Segmented | 1.4× slower | **34×** | **97%** |
+| Interleaved alloc/free | 10,000 | Legacy | 1.7× slower | 6.1× | 84% |
+| Interleaved alloc/free | 10,000 | Segmented | **1.3× slower** | **zero Gen0** | **100%** |
 
-**Small strings (8 chars) — pooled is 3.5–7× slower with no allocation benefit. Avoid the pool for short strings.**
+**Small strings (8 chars):**
+
+| Scenario | N | Pool | Speed vs managed | Alloc vs managed |
+|---|---|---|---|---|
+| Bulk allocate | 10,000 | Legacy | 3.6× slower | 88% |
+| Bulk allocate | 10,000 | Segmented | 4.0× slower | **33%** |
+| Interleaved alloc/free | 10,000 | Legacy | 6.7× slower | 220% (worse!) |
+| Interleaved alloc/free | 10,000 | Segmented | **2.0× slower** | **0% (zero alloc)** |
 
 ```bash
 # Run benchmarks (~90 seconds)
@@ -173,15 +183,38 @@ dotnet run --configuration Release --project Benchmarks -- --filter "*BulkAlloca
 dotnet run --configuration Release --project Benchmarks -- --filter "*Interleaved*"
 ```
 
-## Is this worthwhile?
+## Which should I use?
 
-**It depends entirely on string size.**
+### Use plain managed strings when:
 
-For large strings (256+ chars) at high volume the case is clear: 84–94% less managed allocation, Gen0 collections cut 6–17×, and bulk allocation at N=10,000 is 17% *faster* than managed. The pool's contiguous unmanaged layout amortises the per-allocation overhead once string data dominates bookkeeping cost.
+- Strings are short (≤ ~32 chars) and you are not dominated by GC pauses. Managed is 2–4× faster than either pool at 8 chars, with no added complexity.
+- Allocation rate is low. Pool overhead only pays off under sustained high-throughput pressure.
+- You need string interning, `Dictionary` keys, or any API that expects a real `string`. Both pools require converting back to a managed string at consumption points, erasing the savings.
 
-For small strings (8 chars) it is actively harmful. The pool's per-allocation bookkeeping — a dictionary entry plus free-list tracking — outweighs the string data itself, producing more GC pressure and 3.5–7× worse throughput.
+### Use the Legacy pool (`UnmanagedStringPool`) when:
 
-The crossover is somewhere between 8 and 256 chars. Benchmark at 32 and 64 chars against your actual workload before committing.
+- Strings are large (256+ chars) **and** the dominant pattern is bulk allocate-then-free (not continuous churn). This is the only scenario where a pool is both faster and cheaper than managed: 18% faster throughput at N=10,000 with 92% less managed allocation.
+- Raw throughput is the priority and GC pauses are already acceptable. Legacy's contiguous block layout has the lowest per-access overhead when string data dominates bookkeeping.
+
+### Use the Segmented pool (`SegmentedStringPool`) when:
+
+- The workload involves **continuous churn** — strings are allocated and freed throughout the operation rather than in two distinct phases. Segmented's slab/arena tiers recycle cells without any managed allocation, producing zero Gen0 collections in the interleaved benchmark regardless of string size or N.
+- String sizes are **mixed or unpredictable**. Legacy is catastrophic for small strings under churn (6.7× slower, creates *more* managed allocation than baseline); Segmented is only 2× slower and still allocates nothing.
+- You cannot easily characterise your workload. Segmented's worst case (large-string bulk, 1.2× slower than managed) is far less damaging than Legacy's worst case (small-string churn, 6.7× slower with 2.2× more managed allocation).
+
+**Important caveat — Segmented is never faster than managed strings in isolation.** The best case is 1.12× slower (large strings, interleaved, N=1,000). The benefit is GC pause elimination: at N=10,000 interleaved, managed strings trigger ~640 Gen0 collections per iteration; Segmented triggers zero. Gen0 is fast but not free — under concurrent load those stop-the-world pauses compound. In a latency-sensitive application (request handling, game loop, real-time processing) where string allocation is a meaningful fraction of the work, removing those pauses can improve end-to-end throughput even though individual `Allocate` calls are slower. If GC pauses are not visible in your latency profile, plain managed strings are the right choice.
+
+### Summary
+
+| | Managed strings | Legacy pool | Segmented pool |
+|---|---|---|---|
+| Small strings, any pattern | **best** | avoid | acceptable |
+| Large strings, bulk | good | **best** | good |
+| Large strings, churn | poor | poor | **best** |
+| Small strings, churn | **best** on speed | **avoid** | best on GC |
+| Needs `string` API | **only option** | — | — |
+
+The crossover between Legacy and Segmented for bulk workloads is somewhere between 8 and 256 chars. If bulk throughput is critical, benchmark at 32 and 64 chars with your actual string sizes before committing.
 
 ### Further benchmarking
 
@@ -193,17 +226,15 @@ public int StringLength { get; set; }
 ```
 
 Other scenarios worth measuring:
-- **Mixed sizes** — real workloads rarely have uniform string lengths; a benchmark mixing short and long strings would surface the average-case tradeoff
 - **Concurrent access** — the pool requires external synchronisation for writes; measure lock contention overhead under concurrent load
 - **Pool reuse** — the benchmarks use a pre-warmed pool; measure cold-start (first-use) cost if allocation bursts are infrequent
 
 ### Possible improvements
 
-- **Replace `Dictionary<uint, AllocationInfo>` with a flat array** indexed by allocation ID. The dictionary is the dominant source of managed allocation overhead. A pre-allocated array (or segmented array to avoid one large allocation) would eliminate resizing entirely and reduce managed bookkeeping to near zero.
-- **Reduce `PooledString` from 12 to 8 bytes** by encoding the pool reference as an index rather than a pointer. Smaller structs reduce cache pressure when storing large arrays of `PooledString`.
 - **Size threshold guard** — add a configurable minimum string length and throw (or fall back to a managed string) below it, making the misuse case explicit rather than silently slow.
-- **Write-side locking built in** — currently callers must synchronise writes externally. An opt-in `ThreadSafeUnmanagedStringPool` wrapper with a `ReaderWriterLockSlim` would make concurrent use safer and benchmark-able.
+- **Write-side locking built in** — currently callers must synchronise writes externally. An opt-in thread-safe wrapper with a `ReaderWriterLockSlim` would make concurrent use safer and benchmark-able.
 - **`ReadOnlySpan<char>` allocation path** — `Allocate` currently takes a `string`; accepting `ReadOnlySpan<char>` directly would avoid the managed string allocation at the call site in parsing scenarios.
+- **Mixed-size benchmark** — real workloads rarely have uniform string lengths; a benchmark mixing short and long strings would surface the average-case tradeoff between the two pools.
 
 ## Requirements
 
