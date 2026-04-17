@@ -40,6 +40,8 @@
     <Compile Include="../PooledStringRef.cs" />
     <Compile Include="../SegmentedSlotEntry.cs" />
     <Compile Include="../SegmentedSlotTable.cs" />
+    <Compile Include="../SegmentedSlab.cs" />
+    <Compile Include="../SegmentedSlabTier.cs" />
   </ItemGroup>
 
 </Project>
