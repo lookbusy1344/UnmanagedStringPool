@@ -1,28 +1,219 @@
 namespace LookBusy;
 
 using System;
+using System.Buffers;
 
 /// <summary>
-/// Handle to a string allocated from a <see cref="SegmentedStringPool"/>. 16 bytes:
-/// pool reference (8), slot index (4), generation (4). Value-equality via record struct.
+/// 16-byte handle to a string in a <see cref="SegmentedStringPool"/>. <see cref="default"/> is
+/// the empty sentinel; real allocations have generation ≥ 1. Content-based equality.
 /// <para>
-/// <see cref="default(PooledStringRef)"/> is the empty sentinel; real allocations always have
-/// generation ≥ 1. Disposing any copy invalidates all copies of the same allocation (generation
-/// bump on free), matching the existing <see cref="PooledString"/> semantics.
+/// Disposing any copy invalidates all copies via generation bump on free.
 /// </para>
 /// </summary>
-public readonly record struct PooledStringRef(
-	SegmentedStringPool? Pool,
-	uint SlotIndex,
-	uint Generation
-) : IDisposable
+public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef>
 {
+	private const int ReplaceInlineMatchCap = 64;
+
+	public PooledStringRef(SegmentedStringPool? pool, uint slotIndex, uint generation)
+	{
+		Pool = pool;
+		SlotIndex = slotIndex;
+		Generation = generation;
+	}
+
+	public SegmentedStringPool? Pool { get; }
+	public uint SlotIndex { get; }
+	public uint Generation { get; }
+
 	public static PooledStringRef Empty => default;
 
 	public bool IsEmpty => Pool is null && SlotIndex == 0u && Generation == 0u;
 
-	public void Dispose() { /* filled in later tasks */ }
+	public int Length => IsEmpty ? 0 : Pool!.GetLength(SlotIndex, Generation);
 
-	public readonly bool Equals(PooledStringRef other) => false; // TODO
-	public override readonly int GetHashCode() => 0; // TODO
+	public ReadOnlySpan<char> AsSpan() => IsEmpty ? [] : Pool!.ReadSlot(SlotIndex, Generation);
+
+	public void Free() => Pool?.FreeSlot(SlotIndex, Generation);
+
+	public void Dispose() => Free();
+
+	// ---- query methods ----
+
+	public int IndexOf(ReadOnlySpan<char> value, StringComparison c = StringComparison.Ordinal) =>
+		IsEmpty ? (value.IsEmpty ? 0 : -1) : AsSpan().IndexOf(value, c);
+
+	public int LastIndexOf(ReadOnlySpan<char> value, StringComparison c = StringComparison.Ordinal) =>
+		IsEmpty ? (value.IsEmpty ? 0 : -1) : AsSpan().LastIndexOf(value, c);
+
+	public bool StartsWith(ReadOnlySpan<char> value, StringComparison c = StringComparison.Ordinal) =>
+		IsEmpty ? value.IsEmpty : AsSpan().StartsWith(value, c);
+
+	public bool EndsWith(ReadOnlySpan<char> value, StringComparison c = StringComparison.Ordinal) =>
+		IsEmpty ? value.IsEmpty : AsSpan().EndsWith(value, c);
+
+	public bool Contains(ReadOnlySpan<char> value, StringComparison c = StringComparison.Ordinal) =>
+		IsEmpty ? value.IsEmpty : AsSpan().Contains(value, c);
+
+	public ReadOnlySpan<char> SubstringSpan(int startIndex, int length)
+	{
+		var span = AsSpan();
+		if ((uint)startIndex > (uint)span.Length) {
+			throw new ArgumentOutOfRangeException(nameof(startIndex));
+		}
+		if ((uint)length > (uint)(span.Length - startIndex)) {
+			throw new ArgumentOutOfRangeException(nameof(length));
+		}
+		return span.Slice(startIndex, length);
+	}
+
+	// ---- mutation methods (produce new allocation) ----
+
+	public PooledStringRef Duplicate()
+	{
+		if (IsEmpty) {
+			return Empty;
+		}
+		return Pool!.Allocate(AsSpan());
+	}
+
+	public PooledStringRef Insert(int index, ReadOnlySpan<char> value)
+	{
+		if (Pool is null) {
+			return Empty;
+		}
+		var original = AsSpan();
+		if ((uint)index > (uint)original.Length) {
+			throw new ArgumentOutOfRangeException(nameof(index));
+		}
+		if (value.IsEmpty) {
+			return Duplicate();
+		}
+		var totalLength = original.Length + value.Length;
+		char[]? rented = null;
+		Span<char> buffer = totalLength <= 256
+			? stackalloc char[totalLength]
+			: (rented = ArrayPool<char>.Shared.Rent(totalLength)).AsSpan(0, totalLength);
+
+		original.Slice(0, index).CopyTo(buffer);
+		value.CopyTo(buffer.Slice(index));
+		original.Slice(index).CopyTo(buffer.Slice(index + value.Length));
+
+		var result = Pool.Allocate(buffer);
+		if (rented is not null) {
+			ArrayPool<char>.Shared.Return(rented);
+		}
+		return result;
+	}
+
+	public PooledStringRef Replace(ReadOnlySpan<char> oldValue, ReadOnlySpan<char> newValue)
+	{
+		if (Pool is null) {
+			return Empty;
+		}
+		if (oldValue.IsEmpty) {
+			throw new ArgumentException("oldValue cannot be empty.", nameof(oldValue));
+		}
+		var source = AsSpan();
+		if (source.IsEmpty) {
+			return Empty;
+		}
+
+		Span<int> inlineMatches = stackalloc int[ReplaceInlineMatchCap];
+		int[]? rentedMatches = null;
+		Span<int> matches = inlineMatches;
+		var matchCount = 0;
+
+		var searchStart = 0;
+		while (searchStart <= source.Length - oldValue.Length) {
+			var found = source.Slice(searchStart).IndexOf(oldValue);
+			if (found < 0) {
+				break;
+			}
+			var absolute = searchStart + found;
+			if (matchCount == matches.Length) {
+				var newSize = matches.Length * 2;
+				var nextRented = ArrayPool<int>.Shared.Rent(newSize);
+				matches.Slice(0, matchCount).CopyTo(nextRented);
+				if (rentedMatches is not null) {
+					ArrayPool<int>.Shared.Return(rentedMatches);
+				}
+				rentedMatches = nextRented;
+				matches = rentedMatches;
+			}
+			matches[matchCount++] = absolute;
+			searchStart = absolute + oldValue.Length;
+		}
+
+		if (matchCount == 0) {
+			if (rentedMatches is not null) {
+				ArrayPool<int>.Shared.Return(rentedMatches);
+			}
+			return Duplicate();
+		}
+
+		var totalLength = source.Length + (matchCount * (newValue.Length - oldValue.Length));
+		char[]? rentedChars = null;
+		Span<char> buffer = totalLength <= 256
+			? stackalloc char[totalLength]
+			: (rentedChars = ArrayPool<char>.Shared.Rent(totalLength)).AsSpan(0, totalLength);
+
+		var srcCursor = 0;
+		var dstCursor = 0;
+		for (var i = 0; i < matchCount; i++) {
+			var matchAt = matches[i];
+			var preLen = matchAt - srcCursor;
+			source.Slice(srcCursor, preLen).CopyTo(buffer.Slice(dstCursor));
+			dstCursor += preLen;
+			newValue.CopyTo(buffer.Slice(dstCursor));
+			dstCursor += newValue.Length;
+			srcCursor = matchAt + oldValue.Length;
+		}
+		source.Slice(srcCursor).CopyTo(buffer.Slice(dstCursor));
+
+		var result = Pool.Allocate(buffer);
+		if (rentedMatches is not null) {
+			ArrayPool<int>.Shared.Return(rentedMatches);
+		}
+		if (rentedChars is not null) {
+			ArrayPool<char>.Shared.Return(rentedChars);
+		}
+		return result;
+	}
+
+	// ---- equality + hash ----
+
+	public bool Equals(PooledStringRef other) =>
+		AsSpan().SequenceEqual(other.AsSpan());
+
+	public override bool Equals(object? obj) => obj switch {
+		PooledStringRef r => Equals(r),
+		string s => AsSpan().SequenceEqual(s.AsSpan()),
+		_ => false,
+	};
+
+	public override int GetHashCode()
+	{
+		var span = AsSpan();
+		if (span.IsEmpty) {
+			return 0;
+		}
+		var hc = new HashCode();
+		hc.Add(span.Length);
+		var prefix = span.Slice(0, Math.Min(8, span.Length));
+		foreach (var ch in prefix) {
+			hc.Add(ch);
+		}
+		if (span.Length > 8) {
+			var suffix = span.Slice(Math.Max(span.Length - 8, 8));
+			foreach (var ch in suffix) {
+				hc.Add(ch);
+			}
+		}
+		return hc.ToHashCode();
+	}
+
+	public override string ToString() => AsSpan().ToString();
+
+	public static bool operator ==(PooledStringRef left, PooledStringRef right) => left.Equals(right);
+	public static bool operator !=(PooledStringRef left, PooledStringRef right) => !left.Equals(right);
 }

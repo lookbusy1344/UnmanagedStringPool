@@ -68,7 +68,7 @@ public sealed class SegmentedStringPool : IDisposable
 				Buffer.MemoryCopy(src, (void*)ptr, length * sizeof(char), length * sizeof(char));
 			}
 		}
-		var taggedPtr = new IntPtr((ptr.ToInt64() & SegmentedConstants.PtrMask) | tier);
+		var taggedPtr = new IntPtr((ptr.ToInt64() & SegmentedConstants.PtrMask) | (long)tier);
 		var (slotIndex, gen) = slots.Allocate(taggedPtr, length);
 		return new PooledStringRef(this, slotIndex, gen);
 	}
