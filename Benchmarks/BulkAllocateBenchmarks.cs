@@ -4,14 +4,14 @@ namespace LookBusy.Benchmarks;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
 
-[ShortRunJob]
+[SimpleJob(launchCount: 1, warmupCount: 1, iterationCount: 3)]
 [MemoryDiagnoser]
 public class BulkAllocateBenchmarks
 {
-	[Params(100, 1_000, 10_000)]
+	[Params(1_000, 10_000)]
 	public int N { get; set; }
 
-	[Params(8, 64, 256)]
+	[Params(8, 256)]
 	public int StringLength { get; set; }
 
 	private string _source = "";
