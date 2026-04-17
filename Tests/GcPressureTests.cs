@@ -76,6 +76,97 @@ public sealed class GcPressureTests
 			$"Pooled ({pooledBytes:N0} B) should be <1/4 of managed ({managedBytes:N0} B)");
 	}
 
+	[Fact]
+	public void BulkAllocate_LargeStrings_SegmentedAllocatesLessThanLegacy()
+	{
+		var source = new string('x', LargeStringLength);
+
+		using var legacy = new UnmanagedStringPool(N * LargeStringLength * sizeof(char) * 4);
+		var legacyBytes = MeasureAllocated(() => {
+			var arr = new PooledString[N];
+			for (var i = 0; i < N; i++) { arr[i] = legacy.Allocate(source); }
+			for (var i = 0; i < N; i++) { arr[i].Free(); }
+			GC.KeepAlive(arr);
+		});
+
+		using var seg = new SegmentedStringPool();
+		seg.Reserve(N * LargeStringLength);
+		var segBytes = MeasureAllocated(() => {
+			var arr = new PooledStringRef[N];
+			for (var i = 0; i < N; i++) { arr[i] = seg.Allocate(source); }
+			for (var i = 0; i < N; i++) { arr[i].Free(); }
+			GC.KeepAlive(arr);
+		});
+
+		Assert.True(segBytes < legacyBytes,
+			$"Segmented ({segBytes:N0} B) should allocate less than legacy ({legacyBytes:N0} B)");
+	}
+
+	[Fact]
+	public void InterleavedAllocFree_SegmentedAllocatesLessThanLegacy()
+	{
+		var source = new string('x', LargeStringLength);
+
+		using var legacy = new UnmanagedStringPool(N * LargeStringLength * sizeof(char) * 4);
+		var legacyBytes = MeasureAllocated(() => {
+			var window = new PooledString[WindowSize];
+			for (var i = 0; i < N; i++) {
+				var slot = i % WindowSize;
+				if (i >= WindowSize) { window[slot].Free(); }
+				window[slot] = legacy.Allocate(source);
+			}
+			var limit = Math.Min(N, WindowSize);
+			for (var i = 0; i < limit; i++) { window[i].Free(); }
+			GC.KeepAlive(window);
+		});
+
+		using var seg = new SegmentedStringPool();
+		seg.Reserve(WindowSize * LargeStringLength * 4);
+		var segBytes = MeasureAllocated(() => {
+			var window = new PooledStringRef[WindowSize];
+			for (var i = 0; i < N; i++) {
+				var slot = i % WindowSize;
+				if (i >= WindowSize) { window[slot].Free(); }
+				window[slot] = seg.Allocate(source);
+			}
+			var limit = Math.Min(N, WindowSize);
+			for (var i = 0; i < limit; i++) { window[i].Free(); }
+			GC.KeepAlive(window);
+		});
+
+		Assert.True(segBytes < legacyBytes,
+			$"Segmented ({segBytes:N0} B) should allocate less than legacy ({legacyBytes:N0} B)");
+	}
+
+	[Fact]
+	public void BulkAllocate_Segmented_AllocatesNearZeroManagedMemory()
+	{
+		var source = new string('x', LargeStringLength);
+
+		var managedBytes = MeasureAllocated(() => {
+			var arr = new string[N];
+			for (var i = 0; i < N; i++) { arr[i] = new string('x', LargeStringLength); }
+			GC.KeepAlive(arr);
+		});
+
+		using var seg = new SegmentedStringPool();
+		seg.Reserve(N * LargeStringLength);
+		// Warm-up: grow slot table to steady state
+		var warm = new PooledStringRef[N];
+		for (var i = 0; i < N; i++) { warm[i] = seg.Allocate(source); }
+		for (var i = 0; i < N; i++) { warm[i].Free(); }
+
+		var segBytes = MeasureAllocated(() => {
+			var arr = new PooledStringRef[N];
+			for (var i = 0; i < N; i++) { arr[i] = seg.Allocate(source); }
+			for (var i = 0; i < N; i++) { arr[i].Free(); }
+			GC.KeepAlive(arr);
+		});
+
+		Assert.True(segBytes < managedBytes / 10,
+			$"Segmented steady-state ({segBytes:N0} B) should be <10% of managed ({managedBytes:N0} B)");
+	}
+
 	private static long MeasureAllocated(Action action)
 	{
 		GC.Collect();

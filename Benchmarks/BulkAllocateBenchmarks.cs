@@ -15,17 +15,24 @@ public class BulkAllocateBenchmarks
 	public int StringLength { get; set; }
 
 	private string _source = "";
-	private UnmanagedStringPool _pool = null!;
+	private UnmanagedStringPool _legacy = null!;
+	private SegmentedStringPool _segmented = null!;
 
 	[GlobalSetup]
 	public void Setup()
 	{
 		_source = new string('x', StringLength);
-		_pool = new UnmanagedStringPool(N * StringLength * sizeof(char) * 4);
+		_legacy = new UnmanagedStringPool(N * StringLength * sizeof(char) * 4);
+		_segmented = new SegmentedStringPool();
+		_segmented.Reserve(N * StringLength);
 	}
 
 	[GlobalCleanup]
-	public void Cleanup() => _pool.Dispose();
+	public void Cleanup()
+	{
+		_legacy.Dispose();
+		_segmented.Dispose();
+	}
 
 	[Benchmark(Baseline = true)]
 	public string[] BulkAllocate_Managed()
@@ -38,11 +45,24 @@ public class BulkAllocateBenchmarks
 	}
 
 	[Benchmark]
-	public PooledString[] BulkAllocate_Pooled()
+	public PooledString[] BulkAllocate_Legacy()
 	{
 		var arr = new PooledString[N];
 		for (var i = 0; i < N; i++) {
-			arr[i] = _pool.Allocate(_source);
+			arr[i] = _legacy.Allocate(_source);
+		}
+		for (var i = 0; i < N; i++) {
+			arr[i].Free();
+		}
+		return arr;
+	}
+
+	[Benchmark]
+	public PooledStringRef[] BulkAllocate_Segmented()
+	{
+		var arr = new PooledStringRef[N];
+		for (var i = 0; i < N; i++) {
+			arr[i] = _segmented.Allocate(_source);
 		}
 		for (var i = 0; i < N; i++) {
 			arr[i].Free();

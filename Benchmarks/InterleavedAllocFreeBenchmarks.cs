@@ -17,17 +17,24 @@ public class InterleavedAllocFreeBenchmarks
 	public int StringLength { get; set; }
 
 	private string _source = "";
-	private UnmanagedStringPool _pool = null!;
+	private UnmanagedStringPool _legacy = null!;
+	private SegmentedStringPool _segmented = null!;
 
 	[GlobalSetup]
 	public void Setup()
 	{
 		_source = new string('x', StringLength);
-		_pool = new UnmanagedStringPool(N * StringLength * sizeof(char) * 4);
+		_legacy = new UnmanagedStringPool(N * StringLength * sizeof(char) * 4);
+		_segmented = new SegmentedStringPool();
+		_segmented.Reserve(WindowSize * StringLength * 4);
 	}
 
 	[GlobalCleanup]
-	public void Cleanup() => _pool.Dispose();
+	public void Cleanup()
+	{
+		_legacy.Dispose();
+		_segmented.Dispose();
+	}
 
 	[Benchmark(Baseline = true)]
 	public string InterleavedAllocFree_Managed()
@@ -40,7 +47,7 @@ public class InterleavedAllocFreeBenchmarks
 	}
 
 	[Benchmark]
-	public PooledString InterleavedAllocFree_Pooled()
+	public PooledString InterleavedAllocFree_Legacy()
 	{
 		var window = new PooledString[WindowSize];
 		for (var i = 0; i < N; i++) {
@@ -48,7 +55,26 @@ public class InterleavedAllocFreeBenchmarks
 			if (i >= WindowSize) {
 				window[slot].Free();
 			}
-			window[slot] = _pool.Allocate(_source);
+			window[slot] = _legacy.Allocate(_source);
+		}
+		var last = window[(N - 1) % WindowSize];
+		var limit = Math.Min(N, WindowSize);
+		for (var i = 0; i < limit; i++) {
+			window[i].Free();
+		}
+		return last;
+	}
+
+	[Benchmark]
+	public PooledStringRef InterleavedAllocFree_Segmented()
+	{
+		var window = new PooledStringRef[WindowSize];
+		for (var i = 0; i < N; i++) {
+			var slot = i % WindowSize;
+			if (i >= WindowSize) {
+				window[slot].Free();
+			}
+			window[slot] = _segmented.Allocate(_source);
 		}
 		var last = window[(N - 1) % WindowSize];
 		var limit = Math.Min(N, WindowSize);
