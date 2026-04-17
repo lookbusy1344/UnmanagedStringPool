@@ -173,6 +173,38 @@ dotnet run --configuration Release --project Benchmarks -- --filter "*BulkAlloca
 dotnet run --configuration Release --project Benchmarks -- --filter "*Interleaved*"
 ```
 
+## Is this worthwhile?
+
+**It depends entirely on string size.**
+
+For large strings (256+ chars) at high volume the case is clear: 84–94% less managed allocation, Gen0 collections cut 6–17×, and bulk allocation at N=10,000 is 17% *faster* than managed. The pool's contiguous unmanaged layout amortises the per-allocation overhead once string data dominates bookkeeping cost.
+
+For small strings (8 chars) it is actively harmful. The pool's per-allocation bookkeeping — a dictionary entry plus free-list tracking — outweighs the string data itself, producing more GC pressure and 3.5–7× worse throughput.
+
+The crossover is somewhere between 8 and 256 chars. Benchmark at 32 and 64 chars against your actual workload before committing.
+
+### Further benchmarking
+
+To find the size threshold for your workload, add intermediate `StringLength` params to the benchmark classes:
+
+```csharp
+[Params(8, 32, 64, 128, 256)]
+public int StringLength { get; set; }
+```
+
+Other scenarios worth measuring:
+- **Mixed sizes** — real workloads rarely have uniform string lengths; a benchmark mixing short and long strings would surface the average-case tradeoff
+- **Concurrent access** — the pool requires external synchronisation for writes; measure lock contention overhead under concurrent load
+- **Pool reuse** — the benchmarks use a pre-warmed pool; measure cold-start (first-use) cost if allocation bursts are infrequent
+
+### Possible improvements
+
+- **Replace `Dictionary<uint, AllocationInfo>` with a flat array** indexed by allocation ID. The dictionary is the dominant source of managed allocation overhead. A pre-allocated array (or segmented array to avoid one large allocation) would eliminate resizing entirely and reduce managed bookkeeping to near zero.
+- **Reduce `PooledString` from 12 to 8 bytes** by encoding the pool reference as an index rather than a pointer. Smaller structs reduce cache pressure when storing large arrays of `PooledString`.
+- **Size threshold guard** — add a configurable minimum string length and throw (or fall back to a managed string) below it, making the misuse case explicit rather than silently slow.
+- **Write-side locking built in** — currently callers must synchronise writes externally. An opt-in `ThreadSafeUnmanagedStringPool` wrapper with a `ReaderWriterLockSlim` would make concurrent use safer and benchmark-able.
+- **`ReadOnlySpan<char>` allocation path** — `Allocate` currently takes a `string`; accepting `ReadOnlySpan<char>` directly would avoid the managed string allocation at the call site in parsing scenarios.
+
 ## Requirements
 
 - .NET 10.0 or later
