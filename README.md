@@ -150,9 +150,41 @@ dotnet format
 
 For detailed information about the test suite and coverage areas, see [Tests/README.md](Tests/README.md).
 
+## Benchmarks
+
+The `Benchmarks/` project uses [BenchmarkDotNet](https://benchmarkdotnet.org/) to measure allocation throughput and GC pressure for `UnmanagedStringPool` vs managed strings, parameterised by N (100 / 1,000 / 10,000) and StringLength (8 / 64 / 256 chars).
+
+Two benchmark classes:
+
+- **`BulkAllocateBenchmarks`** — allocate N strings, then free them all. Measures throughput and `Gen0` collections for batch workloads.
+- **`InterleavedAllocFreeBenchmarks`** — sliding window of 3 live strings: allocate into a slot and free the evicted string on each iteration. Exercises free-block coalescing and fragmentation handling.
+
+Each class has a managed baseline method and a pooled comparison method. `[MemoryDiagnoser]` surfaces `Gen0`/`Gen1` collection counts and allocated bytes per operation.
+
+```bash
+# Run all benchmarks (10–30 min)
+dotnet run --configuration Release --project Benchmarks -- --filter "*"
+
+# Run only bulk allocation benchmarks
+dotnet run --configuration Release --project Benchmarks -- --filter "*BulkAllocate*"
+
+# Run only interleaved benchmarks
+dotnet run --configuration Release --project Benchmarks -- --filter "*Interleaved*"
+
+# List discovered benchmarks without running
+dotnet run --configuration Release --project Benchmarks -- --list flat
+```
+
+Results are exported to `Benchmarks/BenchmarkDotNet.Artifacts/`. The key columns are `Gen0`, `Gen1`, `Allocated`, and `Ratio`.
+
+**Expected outcomes:**
+- `BulkAllocate_Pooled` Gen0 collections materially lower than `BulkAllocate_Managed` at N=10,000
+- `InterleavedAllocFree_Pooled` Gen0 collections lower or zero vs managed baseline
+- `Allocated` bytes for pooled variants reflects struct array overhead only (no per-string heap objects)
+
 ## Requirements
 
-- .NET 9.0 or later
+- .NET 10.0 or later
 
 ## License
 
