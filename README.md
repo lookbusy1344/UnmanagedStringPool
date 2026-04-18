@@ -54,6 +54,18 @@ Traditional .NET strings are immutable objects on the managed heap. In high-thro
 
 5. **Size-Indexed Free Lists**: Free blocks are tracked by size buckets for O(1) best-fit allocation
 
+### Segmented pool architecture
+
+`SegmentedStringPool` is a sibling implementation that replaces the legacy pool's single contiguous block + dictionary metadata with a tiered allocator. It targets workloads where managed GC pressure from per-allocation bookkeeping (rather than from the string data itself) is the dominant cost.
+
+1. **Slot table** — managed `SlotEntry[]` indexed by handle; the only managed array that scales with live-string count. A generation counter on each slot, with the high bit doubling as a freed flag, prevents use-after-free without exhausting allocation IDs.
+2. **Slab tier** — strings ≤128 chars route to fixed-size-class slabs (8/16/32/64/128 chars). Each slab tracks cell occupancy via a bitmap (`1 = free`) so `BitOperations.TrailingZeroCount` returns the next free cell in a single x86 instruction. Slabs in each size class are threaded into an intrusive linked list via `NextInClass`; allocation and free are O(1).
+3. **Arena tier** — strings >128 chars go into bump-allocated 1 MB segments with coalesced free-block bins. Free-block headers (`size`, `next`, `prev`, `bin`) live **inside** the freed unmanaged memory itself — no managed allocation for the free list at all.
+
+Steady-state result: zero managed allocation per string, no in-place defragmentation (segments grow by appending, not by copying), and a 16-byte `PooledStringRef` handle (pool reference + slot index + generation) instead of `PooledString`'s 12-byte allocation-id reference.
+
+For pointer tagging, slab bitmap mechanics, intrusive linked-list construction, and the slot generation field, see **[docs/segmented-pool-internals.md](docs/segmented-pool-internals.md)**.
+
 ## Use Cases
 
 Ideal for:
