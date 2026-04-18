@@ -170,12 +170,12 @@ Two patterns measured against a managed string baseline, parameterised by N (1,0
 
 | Scenario | N | Pool | Speed vs managed | Gen0 reduction | Alloc reduction |
 |---|---|---|---|---|---|
-| Bulk allocate | 10,000 | Legacy | **18% faster** | 2.9× | 92% |
+| Bulk allocate | 10,000 | Legacy | **~19% faster** | 2.9× | 92% |
 | Bulk allocate | 10,000 | Segmented | 1.2× slower | **4.3×** | **97%** |
 | Bulk allocate | 1,000 | Legacy | 1.2× slower | 17× | 94% |
 | Bulk allocate | 1,000 | Segmented | 1.4× slower | **34×** | **97%** |
 | Interleaved alloc/free | 10,000 | Legacy | 1.7× slower | 6.1× | 84% |
-| Interleaved alloc/free | 10,000 | Segmented | **1.3× slower** | **zero Gen0** | **100%** |
+| Interleaved alloc/free | 10,000 | Segmented | **1.3–1.6× slower** | **zero Gen0** | **100%** |
 
 **Small strings (8 chars):**
 
@@ -205,16 +205,16 @@ dotnet run --configuration Release --project Benchmarks -- --filter "*Interleave
 
 ### Use the Legacy pool (`UnmanagedStringPool`) when:
 
-- Strings are large (256+ chars) **and** the dominant pattern is bulk allocate-then-free (not continuous churn). This is the only scenario where a pool is both faster and cheaper than managed: 18% faster throughput at N=10,000 with 92% less managed allocation.
+- Strings are large (256+ chars) **and** the dominant pattern is bulk allocate-then-free (not continuous churn). This is the only scenario where a pool is both faster and cheaper than managed: ~19% faster throughput at N=10,000 with 92% less managed allocation.
 - Raw throughput is the priority and GC pauses are already acceptable. Legacy's contiguous block layout has the lowest per-access overhead when string data dominates bookkeeping.
 
 ### Use the Segmented pool (`SegmentedStringPool`) when:
 
 - The workload involves **continuous churn** — strings are allocated and freed throughout the operation rather than in two distinct phases. Segmented's slab/arena tiers recycle cells without any managed allocation, producing zero Gen0 collections in the interleaved benchmark regardless of string size or N.
 - String sizes are **mixed or unpredictable**. Legacy is catastrophic for small strings under churn (6.7× slower, creates *more* managed allocation than baseline); Segmented is only 2× slower and still allocates nothing.
-- You cannot easily characterise your workload. Segmented's worst case (large-string bulk, 1.2× slower than managed) is far less damaging than Legacy's worst case (small-string churn, 6.7× slower with 2.2× more managed allocation).
+- You cannot easily characterise your workload. Segmented's worst case (~1.4–1.6× slower than managed) is far less damaging than Legacy's worst case (small-string churn, 6.7× slower with 2.2× more managed allocation).
 
-**Important caveat — Segmented is never faster than managed strings in isolation.** The best case is 1.12× slower (large strings, interleaved, N=1,000). The benefit is GC pause elimination: at N=10,000 interleaved, managed strings trigger ~640 Gen0 collections per iteration; Segmented triggers zero. Gen0 is fast but not free — under concurrent load those stop-the-world pauses compound. In a latency-sensitive application (request handling, game loop, real-time processing) where string allocation is a meaningful fraction of the work, removing those pauses can improve end-to-end throughput even though individual `Allocate` calls are slower. If GC pauses are not visible in your latency profile, plain managed strings are the right choice.
+**Important caveat — Segmented is never faster than managed strings in isolation.** The best case is 1.15× slower (large strings, interleaved, N=1,000). The benefit is GC pause elimination: at N=10,000 interleaved, managed strings trigger ~640 Gen0 collections per iteration; Segmented triggers zero. Gen0 is fast but not free — under concurrent load those stop-the-world pauses compound. In a latency-sensitive application (request handling, game loop, real-time processing) where string allocation is a meaningful fraction of the work, removing those pauses can improve end-to-end throughput even though individual `Allocate` calls are slower. If GC pauses are not visible in your latency profile, plain managed strings are the right choice.
 
 ### Summary
 
