@@ -56,7 +56,82 @@ public sealed class SegmentedSlabTierTests : IDisposable
 	public void Free_ReturnsCellToSlab()
 	{
 		var ptr = tier.Allocate(5, out var slab);
-		SegmentedSlabTier.Free(ptr, slab);
+		tier.Free(ptr, slab);
 		Assert.Equal(4, slab.FreeCells);
+	}
+
+	[Fact]
+	public void Allocate_FillingSlab_DetachesItFromActiveChain()
+	{
+		SegmentedSlab? slabA = null;
+		for (var i = 0; i < 4; i++) {
+			_ = tier.Allocate(5, out var s);
+			slabA = s;
+		}
+		Assert.NotNull(slabA);
+		Assert.True(slabA!.IsFull);
+
+		_ = tier.Allocate(5, out var slabB);
+		Assert.NotSame(slabA, slabB);
+		Assert.False(slabB.IsFull);
+	}
+
+	[Fact]
+	public void Free_OnFullSlab_RelinksItToActiveChainHead()
+	{
+		var firstPtr = tier.Allocate(5, out var slabA);
+		for (var i = 1; i < 4; i++) {
+			_ = tier.Allocate(5, out _);
+		}
+		Assert.True(slabA.IsFull);
+
+		_ = tier.Allocate(5, out var slabB);
+		Assert.NotSame(slabA, slabB);
+
+		tier.Free(firstPtr, slabA);
+
+		_ = tier.Allocate(5, out var slabAfterFree);
+		Assert.Same(slabA, slabAfterFree);
+	}
+
+	[Fact]
+	public void Free_OnNonFullSlab_DoesNotDuplicateChainEntry()
+	{
+		var p1 = tier.Allocate(5, out var slabA);
+		var p2 = tier.Allocate(5, out _);
+		tier.Free(p1, slabA);
+		tier.Free(p2, slabA);
+
+		// Slab still has all cells free; allocate 4 more should reuse the same slab,
+		// not silently spawn duplicates from a corrupt chain.
+		for (var i = 0; i < 4; i++) {
+			_ = tier.Allocate(5, out var s);
+			Assert.Same(slabA, s);
+		}
+		Assert.Equal(1, tier.SlabCount);
+	}
+
+	[Fact]
+	public void ResetAll_RebuildsChainAcrossAllSlabs()
+	{
+		// Fill slab A so it gets detached.
+		SegmentedSlab? slabA = null;
+		for (var i = 0; i < 4; i++) {
+			_ = tier.Allocate(5, out var s);
+			slabA = s;
+		}
+		_ = tier.Allocate(5, out var slabB);
+		Assert.True(slabA!.IsFull);
+
+		tier.ResetAll();
+
+		// After reset, every existing slab should be on the chain — fill the head and
+		// confirm we land in the second slab without spawning a third.
+		var slabCountBefore = tier.SlabCount;
+		for (var i = 0; i < 4; i++) {
+			_ = tier.Allocate(5, out _);
+		}
+		_ = tier.Allocate(5, out _);
+		Assert.Equal(slabCountBefore, tier.SlabCount);
 	}
 }

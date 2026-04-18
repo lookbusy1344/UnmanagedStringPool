@@ -104,7 +104,7 @@ public sealed class SegmentedStringPool : IDisposable
 		var tier = (int)(entry.Ptr.ToInt64() & SegmentedConstants.TierTagMask);
 		if (tier == SegmentedConstants.TierSlab) {
 			var slab = slabTier.LocateSlabByPointer(raw);
-			SegmentedSlabTier.Free(raw, slab);
+			slabTier.Free(raw, slab);
 		} else {
 			var seg = arenaTier.LocateSegmentByPointer(raw);
 			SegmentedArenaTier.Free(raw, entry.LengthChars * sizeof(char), seg);

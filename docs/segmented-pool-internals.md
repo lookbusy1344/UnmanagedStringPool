@@ -187,34 +187,76 @@ mode the field is in.
 `ClearAllSlots` rebuilds the entire chain in one pass, threading every slot
 into the free list in index order: `freeHead → 0 → 1 → 2 → … → highWater−1`.
 
-### 3.2 Slab chains — per-size-class slab lists
+### 3.2 Slab chains — per-size-class intrusive lists
 
-Each size class has an "active slab" pointer (`activeSlabs[sizeClass]`),
-plus a flat `allSlabs` list used for address-based lookup during free.
-
-The active slab is the one with at least one free cell. When it fills:
+Each size class owns an intrusive singly-linked chain threaded through
+`SegmentedSlab.NextInClass`. The head lives in `activeSlabs[sizeClass]`. A flat
+`allSlabs` list runs alongside for `LocateSlabByPointer` (free path needs to
+find the owning slab from a raw pointer; full slabs are off the chain but must
+still resolve).
 
 ```
-activeSlabs[2] → SlabA(full) → search allSlabs → SlabB(non-full)
-                                                 OR new slab if none
+activeSlabs[2] → SlabC(non-full) → SlabA(non-full) → null     ← chain
+allSlabs       = [SlabA, SlabB(full, detached), SlabC]        ← address index
 ```
 
-Code:
+**Invariant:** every slab on a chain has at least one free cell. Allocations
+happen exclusively from the head, and a slab is detached the moment it fills.
+Consequence: a chain walk is never needed during allocation — a single null /
+non-null check on the head suffices.
+
+Allocate hot path:
 
 ```csharp
-var slab = activeSlabs[sizeClass];
-if (slab is null || slab.IsFull) {
-    slab = FindNonFullSlabInClass(sizeClass) ?? AllocateNewSlab(sizeClass);
-    activeSlabs[sizeClass] = slab;
+var slab = activeSlabs[sizeClass] ?? AllocateNewSlab(sizeClass);
+_ = slab.TryAllocateCell(out var cellIndex);
+if (slab.IsFull) {
+    DetachHead(sizeClass);
 }
 ```
 
-The `SegmentedSlab.NextInClass` property exists for a future optimisation
-(threading the chain explicitly), but the current implementation walks
-`allSlabs` linearly. This is fine because:
-- Slab count grows slowly (each holds 256 cells by default).
-- `Contains(ptr)` is a cheap pointer-range check.
-- The slab list is read-mostly after warm-up.
+Free path re-links a previously-full slab to the head:
+
+```csharp
+public void Free(IntPtr ptr, SegmentedSlab slab)
+{
+    var wasFull = slab.IsFull;
+    slab.FreeCell(slab.CellIndexFromOffset(offset));
+    if (wasFull) {
+        LinkAtHead(SizeClassForCellBytes(slab.CellBytes), slab);
+    }
+}
+```
+
+`wasFull` is the discriminator for "is this slab currently off the chain?" —
+because the only slabs off the chain are full ones, and the only chain slabs
+that fill are heads (which immediately detach). Subsequent frees on the same
+slab see `wasFull = false` and skip re-linking; the slab is already on the
+chain.
+
+Why singly-linked is enough: every operation hits the head. New slabs prepend;
+filled slabs detach from head; re-linked slabs prepend. Mid-list mutation
+never happens, so a `Prev` pointer would be unused weight.
+
+Cost summary: O(1) allocate, O(1) free. The chain has no full slabs in it,
+so no wasted scans.
+
+### 3.2.1 Walk-through
+
+Starting state: empty chain, no slabs. `cellsPerSlab = 4` for clarity.
+
+```
+allocate ×4   → SlabA created → fills → detached      chain: ∅
+allocate ×1   → SlabB created (prepended)             chain: SlabB
+free firstA   → SlabA was full → re-linked at head    chain: SlabA → SlabB
+allocate ×1   → from SlabA (head, has 1 free cell)    chain: SlabA → SlabB
+                SlabA fills → detached                chain: SlabB
+allocate ×3   → from SlabB until full → detached      chain: ∅
+allocate ×1   → SlabC created                         chain: SlabC
+```
+
+The chain naturally drains and refills as activity moves between slabs;
+re-linked slabs land at the head and dominate locality for the next burst.
 
 ### 3.3 Arena bins — doubly-linked, headers in unmanaged memory
 
@@ -280,21 +322,26 @@ To tie it together, here's what happens when you call
 
 1. **Tier choice** — 11 ≤ 128 → slab tier.
 2. **Size class** — `ChooseSizeClass(11) = 1` (16-char class, 32-byte cells).
-3. **Active slab** — `activeSlabs[1]` either reused or newly allocated.
+3. **Chain head** — read `activeSlabs[1]`; if null, allocate a new slab and
+   prepend (it becomes the head). Otherwise use the existing head — invariant
+   guarantees it has at least one free cell.
 4. **Bitmap pop** — `TrailingZeroCount` finds first free cell, bit cleared,
    pointer computed as `slab.Buffer + cellIndex * 32`.
-5. **Tag the pointer** — `(ptr & ~7L) | 0` (slab tier = 0, no-op here).
-6. **Slot allocate** — pop `freeHead` (or bump `highWater`), bump generation,
+5. **Detach if filled** — if the slab is now full, unlink it from the chain
+   head (the next slab, or null, becomes the new head).
+6. **Tag the pointer** — `(ptr & ~7L) | 0` (slab tier = 0, no-op here).
+7. **Slot allocate** — pop `freeHead` (or bump `highWater`), bump generation,
    store tagged pointer + length.
-7. Return `PooledStringRef(pool, slotIndex, newGen)`.
+8. Return `PooledStringRef(pool, slotIndex, newGen)`.
 
 Then `Dispose()` (or explicit `FreeSlot`) does:
 
 1. **Slot lookup** — `TryReadSlot(slotIndex, generation)` checks the slot is
    live and the generation matches.
 2. **Untag** — extract raw pointer and tier from the stored field.
-3. **Tier dispatch** — slab tier → `LocateSlabByPointer` → `slab.FreeCell` →
-   bitmap bit set back to free.
+3. **Tier dispatch** — slab tier → `LocateSlabByPointer` → `slabTier.Free` →
+   bitmap bit set back to free; if the slab was previously full, re-link it
+   at the chain head.
 4. **Slot free** — bump generation, set high bit, push slot index onto
    `freeHead` chain.
 
@@ -312,7 +359,7 @@ no risk of resurrected references.
 | Slot generation flag          | 1 bit of existing 32-bit gen  | O(1) check on every read   |
 | Pointer tier tag              | 1 bit of existing 64-bit ptr  | O(1) mask                  |
 | Slab cell bitmap              | 1 bit per cell, managed array | O(1) `tzcnt` per allocate  |
-| Slab chain per size class     | 5 active-slab pointers + list | O(slabs) on chain miss     |
+| Slab chain per size class     | 5 head pointers + `NextInClass` field | O(1) head check / O(1) re-link |
 | Arena free-block header       | 16 bytes inside freed memory  | O(1) link/unlink           |
 | Arena bin heads               | `int[16]` per segment         | O(blocks in bin) per alloc |
 
