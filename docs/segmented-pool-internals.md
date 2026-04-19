@@ -1,120 +1,167 @@
 # SegmentedStringPool — Internals
 
-A walk through the data structures behind `SegmentedStringPool`, focused on the
-two mechanisms that do most of the work: **bitmask tricks** (pointer tagging,
-generation flags, slab occupancy) and **linked lists** (slot free chain, slab
-chains, arena free-block bins).
+A walk through the data structures behind `SegmentedStringPool`, focused on
+the two recurring tricks: **bitmask reinterpretation** (multiple fields
+packed into one word; one field meaning two different things depending on
+state) and **intrusive linked lists** (links threaded through the data
+they describe, no separate node objects).
 
 This document assumes you've read the design spec
-(`docs/superpowers/specs/2026-04-17-segmented-string-pool-design.md`) and want
-the implementation-level "how does it actually work" picture.
+(`docs/superpowers/specs/2026-04-17-segmented-string-pool-design.md`) and
+want the implementation-level "how does it actually work" picture.
 
 ---
 
 ## 1. The big picture
 
-A single allocation flows through three cooperating subsystems:
+Every string you allocate ends up in exactly one of two places:
+
+| Small strings (`length ≤ 128` chars) | Large strings (`length > 128` chars) |
+|--------------------------------------|--------------------------------------|
+| **Slab tier** — fixed-size cells     | **Arena tier** — variable-size blocks |
+| Exactly one string per cell          | Exactly one string per block         |
+| Cells grouped into *slabs*; slabs grouped into 5 size-class chains | Blocks grouped into *segments*; segments held in an unordered list |
+
+Neither tier ever packs multiple strings into a single cell/block. The
+packing happens one level up: a slab holds many cells, a segment holds
+many blocks.
+
+Callers never touch raw pointers. They get back a `PooledStringRef`
+containing `(pool, slotIndex, generation)` — 16 bytes, fully copyable.
+The `SegmentedSlotTable` resolves that handle to a pointer on every read.
 
 ```
-Allocate(span) → SlotTable → (SlabTier or ArenaTier) → unmanaged byte ptr
-                    │             │             │
-                managed array  bitmap+chain  bins+coalesce
+Allocate(span) → SlabTier or ArenaTier → unmanaged ptr → SlotTable → PooledStringRef
 ```
 
-- **`SegmentedSlotTable`** — managed array of 16-byte entries. The only managed
-  storage that scales with the live-string count. Hands out `(slotIndex, generation)`
-  pairs; consumers never see the raw pointer.
-- **`SegmentedSlabTier`** — five fixed-size-class chains (8/16/32/64/128 chars).
-  Each chain is a list of slabs; each slab is a bitmap over fixed-size cells.
-- **`SegmentedArenaTier`** — list of large segments (default 1 MB each). Each
-  segment is bump-allocated from the tail and a coalesced free-list at the head.
+The three subsystems:
 
-The `PooledStringRef` returned to the caller is `(pool, slotIndex, generation)`
-— 16 bytes, fully copyable, with no direct pointer into unmanaged memory.
+- **`SegmentedSlotTable`** — managed array of 16-byte `SegmentedSlotEntry`
+  records: `{ IntPtr Ptr, int LengthChars, uint Generation }`. This is the
+  only managed storage that grows with the live-string count.
+- **`SegmentedSlabTier`** — owns **five independent singly-linked lists**
+  of slabs, one per size class (cell widths of 8, 16, 32, 64, 128 chars).
+  Each slab is one unmanaged buffer carved into fixed-size cells, plus a
+  managed bitmap marking which cells are in use.
+- **`SegmentedArenaTier`** — owns a `List<SegmentedArenaSegment>`. Each
+  segment is ~1 MB of unmanaged memory with a bump pointer at the tail
+  and a coalesced free-list at the head. The free-list has 16 bins
+  indexed by `Log2(block_size)`.
+
+Two concrete examples of where a string lands:
+
+```
+"hello world" (11 chars)
+  11 ≤ 128              → slab tier
+  ChooseSizeClass(11)=1 → 16-char size class (cells of 32 bytes)
+  head of list[1] = SlabA → bitmap tzcnt picks free cell
+```
+
+```
+a 5000-char document
+  5000 > 128            → arena tier
+  5000 × 2 = 10000 B    → aligned to 10000 B
+  walks segment bins from bin 9 (≥8 KB) upward; else bumps tail
+```
 
 ---
 
-## 2. Bitmask tricks
+## 2. Reinterpreting bits and bytes
 
-### 2.1 Pointer tagging — tier in the low bit
+Every field in this pool does two jobs. Here's how each one is carved up.
 
-`Marshal.AllocHGlobal` returns pointers aligned to at least 8 bytes on every
-supported platform. That means the low **3 bits** of any pointer it returns are
-always zero — free real estate.
+### 2.1 Tagged pointer — tier bit in the low bit
 
-The pool uses bit 0 to record which tier owns the allocation, so `FreeSlot`
-knows whether to call back into the slab tier or the arena tier without
-storing a separate field per slot.
+`Marshal.AllocHGlobal` guarantees 8-byte alignment on every supported
+platform. That makes the low **3 bits** of every raw pointer zero — free
+real estate. Bit 0 is used to record which tier owns the block.
 
 ```
-raw_ptr      = 0x00007FFF_AABBCC00      (always aligned; low 3 bits = 000)
-tagged_ptr   = (raw & ~7L) | tier_bit   (bit 0 = 0 slab, 1 arena)
+raw pointer  : xxxx…xxxx xxxx…xxxx xxxxx000     (low 3 bits guaranteed 0)
+tagged ptr   : xxxx…xxxx xxxx…xxxx xxxxxxxT     (T = tier: 0 slab, 1 arena)
 ```
 
-Encode (`SegmentedStringPool.Allocate`):
+Encoding (`SegmentedStringPool.Allocate`):
 
 ```csharp
 var taggedPtr = new IntPtr((ptr.ToInt64() & PtrMask) | (long)tier);
+// PtrMask = ~7L
 ```
 
-Decode (`SegmentedStringPool.FreeSlot`):
+Decoding (`SegmentedStringPool.FreeSlot`):
 
 ```csharp
-var raw  = new IntPtr(entry.Ptr.ToInt64() & PtrMask);   // ~7L
-var tier = (int)(entry.Ptr.ToInt64() & TierTagMask);    //  1L
+var raw  = new IntPtr(entry.Ptr.ToInt64() & PtrMask);      // clear low bits
+var tier = (int) (entry.Ptr.ToInt64() & TierTagMask);      // isolate bit 0
 ```
 
-The tagged pointer is what gets stored in the slot entry's `Ptr` field, so the
-tier bit travels alongside the pointer and costs zero extra bytes.
-
-### 2.2 Generation field — `[free flag | 31-bit counter]`
-
-Each slot has a 32-bit generation number. The **high bit** marks whether the
-slot is currently free; the low 31 bits are a wrap-around counter that bumps
-on every state change.
+Worked example. Arena tier returned raw pointer `0x7FFF_AABBCC00`:
 
 ```
-generation = [F][cccccccc cccccccc cccccccc ccccccc]
-              ^                                       ^
-              bit 31 = 1 means freed                  bit 0
+raw            : 0x7FFF_AABBCC00   (aligned, low 3 bits = 000)
+raw & ~7       : 0x7FFF_AABBCC00   (unchanged)
+OR (tier = 1)  : 0x7FFF_AABBCC01   ← this is what slot.Ptr stores
+read back & ~7 : 0x7FFF_AABBCC00   (pointer recovered)
+read back &  1 : 0x0000_00000001   → tier = 1 → arena
 ```
 
-The two relevant constants:
+The tag travels with the pointer in the same 64-bit field, costing zero
+extra bytes per slot.
+
+### 2.2 Generation — `[free flag | 31-bit counter]`
+
+Each slot carries a `uint Generation`. Bit 31 is the free flag; the low
+31 bits are a monotonically-increasing reuse counter:
+
+```
+generation : F cccccccc cccccccc cccccccc ccccccc
+             ^ └───────────── 31-bit counter ──┘
+             │
+             └─ bit 31: 1 = freed, 0 = live
+```
+
+The two helpers:
 
 ```csharp
 public const uint HighBit        = 0x80000000u;
 public const uint GenerationMask = 0x7FFFFFFFu;
+
+public static uint MarkFreeAndBumpGen(uint gen) =>
+    ((GenerationValue(gen) + 1u) & GenerationMask) | HighBit;
+
+public static uint ClearFreeAndBumpGen(uint gen) =>
+    (GenerationValue(gen) + 1u) & GenerationMask;
 ```
 
-`MarkFreeAndBumpGen` and `ClearFreeAndBumpGen` both increment the counter
-*and* flip the flag, so a stale `PooledStringRef` from a reused slot can never
-match the new generation:
+Every state change bumps the counter. `PooledStringRef` captures the
+generation at allocation; any read compares against the live slot's
+generation, so a stale ref reusing the same slotIndex is always detected.
+Collision only happens after 2³¹ reuses *of the same slot* — impossible
+in practice.
 
-```csharp
-public static uint MarkFreeAndBumpGen(uint generation) =>
-    ((GenerationValue(generation) + 1u) & GenerationMask) | HighBit;
-
-public static uint ClearFreeAndBumpGen(uint generation) =>
-    (GenerationValue(generation) + 1u) & GenerationMask;
-```
-
-The counter wraps every 2³¹ reuses of the same slot, which is the only
-theoretical collision risk; in practice you'd burn through all of unmanaged
-memory long before it bites.
-
-### 2.3 Slab bitmap — one bit per cell, `1 = free`
-
-Each `SegmentedSlab` has a managed `ulong[] bitmap` covering its cells, with
-the convention **1 = free, 0 = used**. This inversion exists for one reason:
-`BitOperations.TrailingZeroCount(word)` finds the first set bit, which under
-this convention finds the first **free** cell directly — no complement needed.
-On x86 it lowers to a single `tzcnt` instruction.
+Worked sequence on one slot:
 
 ```
-bitmap[0] = ...11111110_11110110   (binary, low bits on the right)
-                          ^^^ used cells: 0, 3
-            tzcnt picks bit 1 → cellIndex = 1
-            mark used:        word & ~(1UL << 1)
+initial       : 0x0000_0000   (flag=0, counter=0; fresh)
+after alloc   : 0x0000_0001   (flag=0, counter=1; live)
+after free    : 0x8000_0002   (flag=1, counter=2; free)
+after realloc : 0x0000_0003   (flag=0, counter=3; live)
+a ref holding 0x0000_0001 now reads → mismatch → throw "stale or freed"
+```
+
+### 2.3 Slab bitmap — `1 = free, 0 = used`
+
+A slab with `CellCount` cells carries a managed `ulong[] bitmap` of
+`⌈CellCount/64⌉` words. The convention `1 = free` is deliberate:
+`BitOperations.TrailingZeroCount(word)` finds the first **set** bit, which
+under this convention is the first **free** cell directly — no complement
+needed. On x86 it lowers to a single `tzcnt`.
+
+```
+bitmap[0] : 1111_1110 1111_0110    (low bit = cell 0, on the right)
+                          ^^^ used cells: 0 and 3
+            tzcnt → bit 1 (lowest 1) → allocate cell 1
+            mark used: word &= ~(1UL << 1)
 ```
 
 Allocation hot path:
@@ -132,42 +179,65 @@ for (var w = 0; w < bitmap.Length; w++) {
 }
 ```
 
-The slab is initialised with all bits set (`ulong.MaxValue`) and the trailing
-"phantom" bits past `CellCount` are masked off so they're never picked.
+Slabs are initialised with every bit `1` (`ulong.MaxValue`); any "phantom"
+bits past `CellCount` in the last word are cleared so they can never be
+picked.
 
 ### 2.4 Arena bin index — `Log2(size) − 4`
 
-The arena keeps 16 free-list bins keyed by power-of-two size class. The bin
-index is computed via `BitOperations.Log2`, with the −4 offset because the
-minimum block size is 16 bytes (`Log2(16) = 4` → bin 0):
+Each arena segment keeps 16 free-list heads in an `int[16]`. Bin index:
 
 ```csharp
 var bin = BitOperations.Log2((uint)size) - 4;
 ```
 
-So 16-byte blocks land in bin 0, 32-byte in bin 1, 64-byte in bin 2, … up to
-bin 15 covering ≥ 524288-byte blocks. Allocation searches from the smallest
-adequate bin upward; it never overshoots into a larger bin without first
-exhausting smaller candidates.
+The `− 4` normalises to bin 0 because the minimum block size is 16 bytes
+and `Log2(16) = 4`:
+
+```
+size   log2  bin    covers
+ 16 →   4  →  0     [16,    32)
+ 32 →   5  →  1     [32,    64)
+ 64 →   6  →  2     [64,   128)
+128 →   7  →  3     [128,  256)
+…
+524288 → 19 → 15    [524288, ∞)  (clamped)
+```
+
+Allocation starts at the smallest sufficient bin and walks upward: a
+40-byte request rounds up to 64, starts at bin 2, and only moves to bin
+3 or higher if bin 2 has no block large enough.
 
 ---
 
 ## 3. Linked lists
 
-Three different linked-list shapes show up. Each one is intrusive — the link
-fields live inside the data they describe, never in a separate `LinkedListNode`.
+Three different linked-list *shapes* appear. All three are **intrusive** —
+the links live inside the data they describe. No `LinkedListNode<T>`
+wrapping, no per-node managed allocation.
 
-### 3.1 Slot table — singly-linked free chain
+### 3.1 Slot free chain — singly-linked through the `Ptr` field
 
-When a slot is freed, its `Ptr` field is repurposed to hold the index of the
-*next* free slot. The table-level `freeHead` field is the head of the chain;
-`NoFreeSlot` (`0xFFFFFFFFu`) is the sentinel "end of list" marker.
+The `SegmentedSlotEntry.Ptr` field has two meanings depending on whether
+the slot is live or free:
 
 ```
-freeHead → slot[5].Ptr=2 → slot[2].Ptr=7 → slot[7].Ptr=NoFreeSlot
+live slot : Ptr = tagged unmanaged pointer   (bit 0 = tier, bits 3..63 = addr)
+free slot : Ptr = next free slot index       (bits 0..31), bits 32..63 = 0
 ```
 
-Allocate pops the head; free pushes a new head — O(1) both ways:
+The generation high bit (§2.2) tells you which interpretation applies
+without ambiguity. **No separate free-list array exists** — the dormant
+`Ptr` field carries the link.
+
+```
+freeHead = 5
+           ↓
+     slots[5].Ptr = 2  →  slots[2].Ptr = 7  →  slots[7].Ptr = 0xFFFFFFFF   (end sentinel)
+     (all three have generation bit 31 = 1)
+```
+
+Allocate pops the head; free pushes a new head — O(1) both ways.
 
 ```csharp
 // Allocate (pop)
@@ -179,47 +249,48 @@ slot.Ptr = new IntPtr((long)freeHead);
 freeHead = slotIndex;
 ```
 
-The clever bit: the same 8-byte `Ptr` field that holds an unmanaged pointer
-when the slot is live holds a 32-bit free-list index when it's dead. The
-generation high bit (§2.2) is the discriminator — you can always tell which
-mode the field is in.
+`ClearAllSlots` rebuilds the chain in one pass, threading every slot in
+index order: `freeHead = 0 → 1 → 2 → … → highWater−1 → NoFreeSlot`.
 
-`ClearAllSlots` rebuilds the entire chain in one pass, threading every slot
-into the free list in index order: `freeHead → 0 → 1 → 2 → … → highWater−1`.
+### 3.2 Slab chains — **five** independent lists, one per size class
 
-### 3.2 Slab chains — per-size-class intrusive lists
-
-Each size class owns an intrusive singly-linked chain threaded through
-`SegmentedSlab.NextInClass`. The head lives in `activeSlabs[sizeClass]`. A flat
-`allSlabs` list runs alongside for `LocateSlabByPointer` (free path needs to
-find the owning slab from a raw pointer; full slabs are off the chain but must
-still resolve).
+This is the concept most likely to confuse readers of the spec. The slab
+tier field `activeSlabs` is a small fixed array; each entry is the head
+of its own singly-linked list:
 
 ```
-activeSlabs[2] → SlabC(non-full) → SlabA(non-full) → null     ← chain
-allSlabs       = [SlabA, SlabB(full, detached), SlabC]        ← address index
+activeSlabs : SegmentedSlab?[5]
+  [0]  8-char cells ( 16 B) → SlabP → SlabQ → null
+  [1] 16-char cells ( 32 B) → SlabR → null
+  [2] 32-char cells ( 64 B) → null                 (no slab yet in this class)
+  [3] 64-char cells (128 B) → SlabS → null
+  [4] 128-char cells (256 B) → SlabT → SlabU → SlabV → null
 ```
 
-**Invariant:** every slab on a chain has at least one free cell. Allocations
-happen exclusively from the head, and a slab is detached the moment it fills.
-Consequence: a chain walk is never needed during allocation — a single null /
-non-null check on the head suffices.
+So yes — **five entirely separate linked lists**. Each list contains only
+slabs of that one size class; a 32-char slab never appears in the 128-char
+list. A request for a 40-char string is routed exclusively through list
+[3] (64-char cells, since 40 ≤ 64). Links are threaded through
+`SegmentedSlab.NextInClass`.
 
-Allocate hot path:
+**Chain invariant:** every slab on a chain has at least one free cell. A
+slab drops off its chain the moment it fills; freeing a cell on a
+previously-full slab re-links it at the head of its chain.
+
+That invariant reduces allocation to "read the head":
 
 ```csharp
 var slab = activeSlabs[sizeClass] ?? AllocateNewSlab(sizeClass);
 _ = slab.TryAllocateCell(out var cellIndex);
 if (slab.IsFull) {
-    DetachHead(sizeClass);
+    DetachHead(sizeClass);              // pop from chain
 }
 ```
 
-Free path re-links a previously-full slab to the head:
+And free reduces to "re-link only on the full→non-full transition":
 
 ```csharp
-public void Free(IntPtr ptr, SegmentedSlab slab)
-{
+public void Free(IntPtr ptr, SegmentedSlab slab) {
     var wasFull = slab.IsFull;
     slab.FreeCell(slab.CellIndexFromOffset(offset));
     if (wasFull) {
@@ -228,141 +299,153 @@ public void Free(IntPtr ptr, SegmentedSlab slab)
 }
 ```
 
-`wasFull` is the discriminator for "is this slab currently off the chain?" —
-because the only slabs off the chain are full ones, and the only chain slabs
-that fill are heads (which immediately detach). Subsequent frees on the same
-slab see `wasFull = false` and skip re-linking; the slab is already on the
-chain.
+A separate flat `List<SegmentedSlab> allSlabs` tracks **every** slab
+regardless of chain state. It exists only so `LocateSlabByPointer` can
+find the owning slab when freeing a raw pointer — full slabs are off
+their chain but must still be resolvable.
 
-Why singly-linked is enough: every operation hits the head. New slabs prepend;
-filled slabs detach from head; re-linked slabs prepend. Mid-list mutation
-never happens, so a `Prev` pointer would be unused weight.
-
-Cost summary: O(1) allocate, O(1) free. The chain has no full slabs in it,
-so no wasted scans.
-
-### 3.2.1 Walk-through
-
-Starting state: empty chain, no slabs. `cellsPerSlab = 4` for clarity.
+Worked sequence (size class [0], `cellsPerSlab = 4`):
 
 ```
-allocate ×4   → SlabA created → fills → detached      chain: ∅
-allocate ×1   → SlabB created (prepended)             chain: SlabB
-free firstA   → SlabA was full → re-linked at head    chain: SlabA → SlabB
-allocate ×1   → from SlabA (head, has 1 free cell)    chain: SlabA → SlabB
-                SlabA fills → detached                chain: SlabB
-allocate ×3   → from SlabB until full → detached      chain: ∅
-allocate ×1   → SlabC created                         chain: SlabC
+allocate ×4  → SlabA created, fills → detached         chain: (empty)
+allocate ×1  → SlabB created (prepended)               chain: SlabB
+free firstA  → SlabA was full → re-link at head        chain: SlabA → SlabB
+allocate ×1  → from SlabA head (1 free cell)           chain: SlabA → SlabB
+                SlabA fills again → detached           chain: SlabB
+allocate ×3  → from SlabB until full → detached        chain: (empty)
+allocate ×1  → SlabC created                           chain: SlabC
 ```
 
-The chain naturally drains and refills as activity moves between slabs;
-re-linked slabs land at the head and dominate locality for the next burst.
+Why singly-linked is enough: every mutation hits the head (prepend on
+re-link or new, pop on fill). Mid-list nodes are never touched, so a
+`Prev` pointer would be dead weight.
 
-### 3.3 Arena bins — doubly-linked, headers in unmanaged memory
+### 3.3 Arena bins — doubly-linked, headers *inside* the freed bytes
 
-This is the most interesting list. Each free block in an arena segment carries
-its own 16-byte header **inside** the freed bytes:
+Arena free blocks carry their own link headers **in the very memory they
+describe**:
 
 ```csharp
 [StructLayout(LayoutKind.Sequential, Size = 16)]
 internal struct SegmentedFreeBlockHeader
 {
-    public int SizeBytes;
-    public int NextOffset;   // -1 = end
-    public int PrevOffset;   // -1 = head
-    public int BinIndex;
+    public int SizeBytes;    // total block size (including this 16-byte header)
+    public int NextOffset;   // −1 = end of bin
+    public int PrevOffset;   // −1 = head of bin
+    public int BinIndex;     // which bin this block is threaded through
 }
 ```
 
-Crucially this struct is never instantiated on the managed heap — it's read
-and written via `unsafe` pointer cast directly to the segment's unmanaged
-buffer:
+The struct is never instantiated on the managed heap — it's read and
+written via `unsafe` pointer cast directly into the segment buffer:
 
 ```csharp
 private unsafe SegmentedFreeBlockHeader ReadHeader(int offset) =>
     *(SegmentedFreeBlockHeader*)(Buffer.ToInt64() + offset);
 ```
 
-So the same 16 bytes are a free-list node when the block is free and the first
-16 bytes of string data when it's allocated. Free-list bookkeeping costs zero
-managed memory.
-
-The 16 bins live in `int[] binHeads`, each holding the offset of the head
-block (or `-1` if the bin is empty):
+So the same 16 bytes of a block mean wildly different things depending on
+whether that block is live or free:
 
 ```
-binHeads[3] → @1024(48B) ↔ @4096(56B) ↔ @8192(48B) → -1
-                  prev=-1                     next=-1
+live block (holds an allocated string):
+  +0  [char0][char1][char2][char3] …  — UTF-16 payload
+  (no header; length comes from the slot entry's LengthChars)
+
+free block (on a bin chain):
+  +0   SizeBytes   (int)         ┐
+  +4   NextOffset  (int, -1=tail) │  16-byte header
+  +8   PrevOffset  (int, -1=head) │
+  +12  BinIndex    (int)         ┘
+  +16  (unused but reserved as part of the block)
 ```
 
-Allocation searches from the smallest sufficient bin upward, walking the
-chain until it finds a block large enough. If the block is bigger than needed,
-the remainder is split off, given a fresh header, and linked into its own bin
-(`LinkIntoBin` writes prev/next/bin and updates `binHeads`).
+Allocating a block overwrites the header with string data. Freeing
+restores it. Free-list bookkeeping therefore costs **zero managed
+memory** per block.
 
-Free-block coalescing happens on every `Free` call, before the new block is
-linked in:
+Bin heads live in `int[] binHeads` on the segment:
+
+```
+binHeads[3] → @1024 (48 B) ↔ @4096 (56 B) ↔ @8192 (48 B) → -1
+               prev=-1                          next=-1
+```
+
+Allocation walks from the smallest sufficient bin upward. If the chosen
+block is oversized, the allocator splits off the `[taken | remainder]`
+tail, writes a fresh header into it, and re-links it to the head of its
+own bin (which may or may not be the original bin).
+
+Free-block coalescing happens on every `Free` call, before the new block
+is linked in:
 
 ```csharp
-TryCoalesceForward (ref offset, ref size);   // merge with successor if free
+TryCoalesceForward(ref offset, ref size);    // merge with successor if free
 TryCoalesceBackward(ref offset, ref size);   // merge with predecessor if free
 ```
 
-Both helpers scan all 16 bins for a neighbour at the right offset, unlink it,
-and absorb its size. This is O(total free blocks) per free — fine for typical
-workloads, and correct without needing a sorted address index. If you ever
-profile hotspots, this is the obvious place to add a per-segment offset map.
+Each helper scans all 16 bins looking for a neighbour at the right
+offset, unlinks it, and absorbs its size. This is O(total free blocks)
+per free — fine for typical workloads, and avoids the complexity of a
+sorted address index. If it ever showed up as a hotspot, an
+offset-indexed map per segment would be the obvious fix.
+
+Why *this* list is doubly-linked (unlike the slab chain): arbitrary
+mid-list blocks get unlinked during allocation (remove the selected
+block), during split (remove and re-bin), and during coalescing (remove
+the neighbour). A `PrevOffset` makes each unlink O(1) without walking
+the chain.
 
 ---
 
 ## 4. End-to-end: a single Allocate + Free
 
-To tie it together, here's what happens when you call
-`pool.Allocate("hello world")` (11 chars, slab tier):
+Putting it all together, `pool.Allocate("hello world")` (11 chars → slab
+tier) does:
 
 1. **Tier choice** — 11 ≤ 128 → slab tier.
-2. **Size class** — `ChooseSizeClass(11) = 1` (16-char class, 32-byte cells).
-3. **Chain head** — read `activeSlabs[1]`; if null, allocate a new slab and
-   prepend (it becomes the head). Otherwise use the existing head — invariant
-   guarantees it has at least one free cell.
-4. **Bitmap pop** — `TrailingZeroCount` finds first free cell, bit cleared,
-   pointer computed as `slab.Buffer + cellIndex * 32`.
-5. **Detach if filled** — if the slab is now full, unlink it from the chain
-   head (the next slab, or null, becomes the new head).
-6. **Tag the pointer** — `(ptr & ~7L) | 0` (slab tier = 0, no-op here).
-7. **Slot allocate** — pop `freeHead` (or bump `highWater`), bump generation,
-   store tagged pointer + length.
+2. **Size class** — `ChooseSizeClass(11) = 1` (16-char cells, 32 bytes each).
+3. **Chain head** — read `activeSlabs[1]`; if null, allocate a new slab
+   and prepend. Otherwise use the existing head — the invariant guarantees
+   ≥1 free cell.
+4. **Bitmap pop** — `tzcnt` picks the first free bit, flip it to 0,
+   compute cell pointer as `slab.Buffer + cellIndex * 32`.
+5. **Detach if now full** — if `IsFull`, unlink from chain head.
+6. **Tag the pointer** — `(ptr & ~7L) | 0` (slab tier → bit 0 stays 0).
+7. **Slot allocate** — pop `freeHead` (or bump `highWater`), clear the
+   free flag and bump the generation counter, store tagged pointer +
+   length.
 8. Return `PooledStringRef(pool, slotIndex, newGen)`.
 
 Then `Dispose()` (or explicit `FreeSlot`) does:
 
-1. **Slot lookup** — `TryReadSlot(slotIndex, generation)` checks the slot is
-   live and the generation matches.
+1. **Slot lookup** — `TryReadSlot(slotIndex, generation)` checks the slot
+   is live and the generation matches.
 2. **Untag** — extract raw pointer and tier from the stored field.
-3. **Tier dispatch** — slab tier → `LocateSlabByPointer` → `slabTier.Free` →
-   bitmap bit set back to free; if the slab was previously full, re-link it
-   at the chain head.
-4. **Slot free** — bump generation, set high bit, push slot index onto
-   `freeHead` chain.
+3. **Tier dispatch** — slab tier: `LocateSlabByPointer` → `slabTier.Free`
+   → set the bitmap bit back to 1; if the slab was previously full,
+   re-link at the chain head.
+4. **Slot free** — bump generation, set the high bit, push slot index
+   onto the `freeHead` chain.
 
-Any subsequent operation through the same `PooledStringRef` will fail the
-generation check at step 1 and throw "stale or freed" — no use-after-free,
-no risk of resurrected references.
+Any subsequent use of the same `PooledStringRef` now fails the generation
+check at step 1 and throws "stale or freed" — no use-after-free, no
+resurrection.
 
 ---
 
-## 5. Summary of the bit/list inventory
+## 5. Inventory
 
-| Mechanism                     | Storage cost                  | Lookup cost                |
-|-------------------------------|-------------------------------|----------------------------|
-| Slot free chain               | 0 (reuses `Ptr` field)        | O(1) push / O(1) pop       |
-| Slot generation flag          | 1 bit of existing 32-bit gen  | O(1) check on every read   |
-| Pointer tier tag              | 1 bit of existing 64-bit ptr  | O(1) mask                  |
-| Slab cell bitmap              | 1 bit per cell, managed array | O(1) `tzcnt` per allocate  |
-| Slab chain per size class     | 5 head pointers + `NextInClass` field | O(1) head check / O(1) re-link |
-| Arena free-block header       | 16 bytes inside freed memory  | O(1) link/unlink           |
-| Arena bin heads               | `int[16]` per segment         | O(blocks in bin) per alloc |
+| Mechanism                     | Storage cost                       | Lookup cost                    |
+|-------------------------------|------------------------------------|--------------------------------|
+| Slot free chain               | 0 (reuses `Ptr` field)             | O(1) push / O(1) pop           |
+| Slot generation flag          | 1 bit of existing 32-bit gen       | O(1) check on every read       |
+| Tier tag in pointer           | 1 bit of existing 64-bit ptr       | O(1) mask                      |
+| Slab cell bitmap              | 1 bit per cell, managed array      | O(1) `tzcnt` per allocate      |
+| Slab size-class chains (×5)   | 5 head pointers + `NextInClass`    | O(1) head check, O(1) re-link  |
+| Arena free-block header       | 16 bytes inside freed memory       | O(1) link/unlink               |
+| Arena bin heads               | `int[16]` per segment              | O(blocks in bin) per allocate  |
 
-Every "extra" data structure either reuses bits/bytes that were already there
-or is a fixed-size managed array. There is no per-allocation managed
-allocation in steady state.
+Every "extra" data structure either reuses bits/bytes already present or
+is a fixed-size managed array. Steady-state allocation performs zero
+managed allocations.
