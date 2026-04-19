@@ -94,6 +94,11 @@ a 5000-char document
   walks segment bins from bin 9 (≥8 KB) upward; else bumps tail
 ```
 
+**Empty strings are special.** `Allocate("")` short-circuits before any
+tier work happens and returns the singleton `PooledStringRef.Empty`. No
+slot is consumed, no cell allocated, no block reserved — both tiers only
+ever see non-empty inputs.
+
 **Why two tiers?** Slab allocate and free are O(1) because every cell in a
 size class is identical — one bitmap word tells you everything. Arenas
 can't do that because block sizes vary, so they pay O(free blocks) for
@@ -468,10 +473,11 @@ the chain.
 
 ---
 
-## 4. End-to-end: a single Allocate + Free
+## 4. End-to-end: Allocate + Free for each tier
 
-Putting it all together, `pool.Allocate("hello world")` (11 chars → slab
-tier) does:
+### 4.1 Small string (slab tier)
+
+`pool.Allocate("hello world")` (11 chars):
 
 1. **Tier choice** — 11 ≤ 128 → slab tier.
 2. **Size class** — `ChooseSizeClass(11) = 1` (16-char cells, 32 bytes each).
@@ -498,9 +504,52 @@ Then `Dispose()` (or explicit `FreeSlot`) does:
 4. **Slot free** — bump generation, set the high bit, push slot index
    onto the `freeHead` chain.
 
-Any subsequent use of the same `PooledStringRef` now fails the generation
-check at step 1 and throws "stale or freed" — no use-after-free, no
-resurrection.
+### 4.2 Large string (arena tier)
+
+`pool.Allocate(fiveThousandCharDoc)` (5000 chars):
+
+1. **Tier choice** — 5000 > 128 → arena tier.
+2. **Byte count** — 5000 × 2 = 10 000 B, aligned up to an 8-byte boundary
+   (already aligned here).
+3. **Bin search** — starting bin = `Log2(10 000) − 4 = 13 − 4 = 9`. For
+   each segment in insertion order, walk `binHeads[9..15]` looking for a
+   block ≥ 10 000 B. On a hit: unlink the block; if the remainder is
+   ≥ 16 B, **split** — write a fresh `SegmentedFreeBlockHeader` into the
+   tail and `LinkIntoBin` to the right bin.
+4. **Bump fallback** — if no bin block fits, check `BumpOffset + 10 000 ≤
+   Capacity`; if yes, return `Buffer + BumpOffset` and advance the tail.
+5. **New segment** — if every existing segment fails, append a new
+   segment of `max(defaultSegmentBytes, byteCount)` and retry allocation
+   against it.
+6. **Tag the pointer** — `(ptr & ~7L) | 1` (arena tier → bit 0 becomes 1).
+7. **Slot allocate** — identical to the slab path.
+
+Freeing is where the arena does the most interesting work:
+
+1. **Slot lookup** and **untag** — identical to slab.
+2. **Locate segment** — `LocateSegmentByPointer` finds the owning
+   `SegmentedArenaSegment` by address range.
+3. **Coalesce forward** — scan all 16 bins for a free block whose offset
+   equals `offset + size`. If found: unlink it, fold its size into ours.
+4. **Coalesce backward** — scan all 16 bins for a free block `X` with
+   `X.offset + X.SizeBytes == offset`. If found: unlink it, adopt its
+   offset as the new starting offset, fold its size in.
+5. **Write header** — at the (possibly adjusted) offset, write
+   `SegmentedFreeBlockHeader { SizeBytes, NextOffset = −1, PrevOffset =
+   −1, BinIndex = BinIndexForSize(size) }`.
+6. **Link into bin** — prepend to `binHeads[hdr.BinIndex]`.
+7. **Slot free** — identical to slab.
+
+Coalesce-then-write-header guarantees the free list never contains two
+adjacent free blocks; worst-case fragmentation is bounded by whatever is
+currently live, not by history.
+
+---
+
+Any subsequent use of a disposed `PooledStringRef` — slab or arena —
+fails the generation check at step 1 of Free and throws "stale or freed".
+No use-after-free, no resurrection, regardless of which tier held the
+string.
 
 ---
 
