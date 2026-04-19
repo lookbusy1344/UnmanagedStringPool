@@ -12,6 +12,36 @@ want the implementation-level "how does it actually work" picture.
 
 ---
 
+## Orientation
+
+**Vocabulary.** Five container words recur throughout; they are not
+interchangeable:
+
+| Word    | What it is                                                      |
+|---------|-----------------------------------------------------------------|
+| **Slot**    | One row of `SegmentedSlotTable`: `(Ptr, LengthChars, Generation)`. The public handle (`PooledStringRef`) is really a slot index plus a generation number. One slot per live string. |
+| **Slab**    | One unmanaged buffer in the slab tier, carved into fixed-size cells. Holds many strings belonging to one size class. |
+| **Cell**    | One fixed-size slice of a slab. Holds exactly one string.       |
+| **Segment** | One ~1 MB unmanaged buffer in the arena tier. Holds many variable-size blocks. |
+| **Block**   | One variable-size slice of a segment. Holds exactly one string when live, or a 16-byte link header followed by dormant bytes when free. |
+
+**Unit of length.** .NET strings are UTF-16: each `char` is 2 bytes. A
+40-char string occupies 80 bytes of unmanaged memory. All char↔byte
+conversions below follow from that.
+
+**Why "segmented".** The original `UnmanagedStringPool` allocates one
+contiguous unmanaged block and grows by copying. `SegmentedStringPool`
+maintains many smaller buffers of two kinds (slabs and segments), added
+on demand. Nothing ever moves once allocated, so raw pointers stay valid
+until explicitly freed.
+
+**Thread safety.** Not thread-safe. None of `SegmentedSlotTable`,
+`SegmentedSlabTier`, or `SegmentedArenaTier` use locks or atomics. Callers
+are responsible for any required synchronization — even concurrent reads
+can race against a concurrent mutation.
+
+---
+
 ## 1. The big picture
 
 Every string you allocate ends up in exactly one of two places:
@@ -63,6 +93,27 @@ a 5000-char document
   5000 × 2 = 10000 B    → aligned to 10000 B
   walks segment bins from bin 9 (≥8 KB) upward; else bumps tail
 ```
+
+**Why two tiers?** Slab allocate and free are O(1) because every cell in a
+size class is identical — one bitmap word tells you everything. Arenas
+can't do that because block sizes vary, so they pay O(free blocks) for
+coalescing in exchange for holding arbitrarily large strings. Routing
+small strings through the specialised tier keeps the hot path fast and
+reserves the heavier machinery for the few large allocations that need
+it.
+
+**Growth.** Every subsystem grows independently, and growth is purely
+additive — nothing ever copies or moves:
+
+- **Slot table** doubles its managed array when `highWater` (the count of
+  slot indices ever touched) reaches `Capacity`.
+- **Slab tier** allocates a fresh slab (a new unmanaged buffer) whenever a
+  size-class chain is empty. Individual slabs never resize.
+- **Arena tier** appends a new segment (default 1 MB) when every existing
+  segment fails to satisfy a request. Individual segments never resize.
+
+That "nothing moves" property is load-bearing: the slot table stores raw
+unmanaged pointers, so any relocation would invalidate them.
 
 ---
 
@@ -249,6 +300,12 @@ slot.Ptr = new IntPtr((long)freeHead);
 freeHead = slotIndex;
 ```
 
+The allocator prefers popping `freeHead`; if the chain is empty, it bumps
+`highWater` (the watermark of slots ever touched) and uses the next
+never-before-allocated index, growing the underlying array by doubling
+when `highWater` hits `Capacity`. Slots past `highWater` are always in
+their zero-initialised state.
+
 `ClearAllSlots` rebuilds the chain in one pass, threading every slot in
 index order: `freeHead = 0 → 1 → 2 → … → highWater−1 → NoFreeSlot`.
 
@@ -272,6 +329,18 @@ slabs of that one size class; a 32-char slab never appears in the 128-char
 list. A request for a 40-char string is routed exclusively through list
 [3] (64-char cells, since 40 ≤ 64). Links are threaded through
 `SegmentedSlab.NextInClass`.
+
+**Why the 8/16/32/64/128 progression?** Geometric doubling caps internal
+fragmentation. A string of `N` chars always lands in a cell of at most
+`2N` chars, so wasted space per live allocation stays below 50%. A denser
+progression — classes every 4 chars, say — would mean more chains, more
+slabs, colder caches, for marginal fragmentation gain.
+
+**Fragmentation cost.** A 2-char string still occupies a full 8-char cell
+(16 bytes of unmanaged memory). That's real overhead, deliberately traded
+for O(1) allocate, O(1) free, and zero per-allocation metadata — every
+slab-tier allocation skips the per-block header and variable-size
+bookkeeping that the arena tier pays.
 
 **Chain invariant:** every slab on a chain has at least one free cell. A
 slab drops off its chain the moment it fills; freeing a cell on a
@@ -304,7 +373,8 @@ regardless of chain state. It exists only so `LocateSlabByPointer` can
 find the owning slab when freeing a raw pointer — full slabs are off
 their chain but must still be resolvable.
 
-Worked sequence (size class [0], `cellsPerSlab = 4`):
+Worked sequence (size class [0], `cellsPerSlab = 4` for illustration; the
+production default is 256):
 
 ```
 allocate ×4  → SlabA created, fills → detached         chain: (empty)
