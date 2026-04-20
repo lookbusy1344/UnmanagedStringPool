@@ -15,7 +15,10 @@ internal sealed class SegmentedSlabTier : IDisposable
 {
 	private static readonly int[] SizeClassChars = [8, 16, 32, 64, 128];
 
+	// Chain invariant: every slab in activeSlabs[] has at least one free cell.
+	// Full slabs are detached from their chain on the cycle they fill; freeing a cell in a full slab re-links it.
 	private readonly SegmentedSlab?[] activeSlabs = new SegmentedSlab?[SegmentedConstants.SlabSizeClassCount];
+	// Tracks every slab regardless of chain state so LocateSlabByPointer can find full (off-chain) slabs during Free.
 	private readonly List<SegmentedSlab> allSlabs = [];
 	private readonly int cellsPerSlab;
 
@@ -41,6 +44,10 @@ internal sealed class SegmentedSlabTier : IDisposable
 		}
 	}
 
+	/// <summary>
+	/// Returns the index of the smallest size class that fits <paramref name="charCount"/> chars,
+	/// or -1 if the count exceeds the slab tier threshold (caller must route to the arena tier).
+	/// </summary>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static int ChooseSizeClass(int charCount)
 	{
@@ -55,6 +62,10 @@ internal sealed class SegmentedSlabTier : IDisposable
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static int CellBytesForSizeClass(int sizeClass) => SizeClassChars[sizeClass] * sizeof(char);
 
+	/// <summary>
+	/// Allocates one cell from the appropriate size-class chain. If the chain head fills after allocation
+	/// it is detached so the chain invariant (every slab has ≥1 free cell) is maintained.
+	/// </summary>
 	public IntPtr Allocate(int charCount, out SegmentedSlab owningSlab)
 	{
 		var sizeClass = ChooseSizeClass(charCount);
@@ -68,12 +79,16 @@ internal sealed class SegmentedSlabTier : IDisposable
 			_ = slab.TryAllocateCell(out cellIndex);
 		}
 		if (slab.IsFull) {
-			DetachHead(sizeClass);
+			DetachHead(sizeClass); // remove from chain; still tracked in allSlabs for pointer lookup
 		}
 		owningSlab = slab;
 		return new IntPtr(slab.Buffer.ToInt64() + slab.OffsetOfCell(cellIndex));
 	}
 
+	/// <summary>
+	/// Returns one cell to its slab. If the slab was full (and therefore off its chain),
+	/// re-links it at the chain head so it becomes available for future allocations again.
+	/// </summary>
 	public void Free(IntPtr ptr, SegmentedSlab slab)
 	{
 		var wasFull = slab.IsFull;
@@ -94,6 +109,11 @@ internal sealed class SegmentedSlabTier : IDisposable
 		throw new InvalidOperationException("Pointer does not belong to any slab in this tier");
 	}
 
+	/// <summary>
+	/// Resets all slabs to fully-free and re-threads them into their size-class chains without freeing unmanaged memory.
+	/// Used by <c>pool.Clear()</c>. The two-pass approach (disconnect all, then re-link all) avoids stale NextInClass
+	/// pointers left over from previous chain state.
+	/// </summary>
 	public void ResetAll()
 	{
 		for (var i = 0; i < activeSlabs.Length; i++) {
@@ -103,12 +123,17 @@ internal sealed class SegmentedSlabTier : IDisposable
 			s.ResetAllCellsFree();
 			s.NextInClass = null;
 		}
-		// Re-thread every slab into its size-class chain.
+		// Re-thread every slab into its size-class chain in allSlabs insertion order.
+		// LinkAtHead prepends, so the last slab processed for a class ends up as the chain head.
 		foreach (var s in allSlabs) {
 			LinkAtHead(SizeClassForCellBytes(s.CellBytes), s);
 		}
 	}
 
+	/// <summary>
+	/// Pre-allocates slab capacity for at least <paramref name="smallChars"/> chars of small-string storage.
+	/// Always uses the largest size class (128-char cells) so any future small string fits in the reserved slabs.
+	/// </summary>
 	public void Reserve(int smallChars)
 	{
 		var sizeClass = SegmentedConstants.SlabSizeClassCount - 1;

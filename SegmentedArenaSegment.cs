@@ -55,6 +55,11 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		return raw >= start && raw < start + Capacity;
 	}
 
+	/// <summary>
+	/// Attempts to allocate <paramref name="byteCount"/> bytes from this segment. Searches free-list bins from the
+	/// smallest sufficient bin upward, splitting any oversized block. Falls back to bump allocation if no free block fits.
+	/// Returns false if neither strategy can satisfy the request.
+	/// </summary>
 	public bool TryAllocate(int byteCount, out IntPtr ptr)
 	{
 		var size = AlignSize(byteCount);
@@ -67,6 +72,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 					UnlinkFromBin(head, ref hdr);
 					var remainder = hdr.SizeBytes - size;
 					if (remainder >= SegmentedConstants.MinArenaBlockBytes) {
+						// Split the block: the tail portion becomes a new free block in its own bin.
 						var tailOffset = head + size;
 						WriteHeader(tailOffset, new SegmentedFreeBlockHeader {
 							SizeBytes = remainder,
@@ -82,6 +88,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 				head = hdr.NextOffset;
 			}
 		}
+		// Bump fallback: carve from the never-yet-used tail of the buffer.
 		if (BumpOffset + size <= Capacity) {
 			ptr = new IntPtr(Buffer.ToInt64() + BumpOffset);
 			BumpOffset += size;
@@ -91,6 +98,10 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		return false;
 	}
 
+	/// <summary>
+	/// Returns a block to the free list, writing a <see cref="SegmentedFreeBlockHeader"/> into the freed memory itself.
+	/// Coalesces with adjacent free blocks before linking into a bin to reduce fragmentation.
+	/// </summary>
 	public void Free(IntPtr ptr, int byteCount)
 	{
 		var offset = (int)(ptr.ToInt64() - Buffer.ToInt64());
@@ -106,6 +117,10 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		LinkIntoBin(offset);
 	}
 
+	/// <summary>
+	/// Resets the segment to its pristine state without freeing unmanaged memory. Used by <c>pool.Clear()</c>;
+	/// setting <see cref="BumpOffset"/> to zero makes the entire buffer available to the bump allocator again.
+	/// </summary>
 	public void Reset()
 	{
 		BumpOffset = 0;
@@ -132,6 +147,9 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		return (size + (alignment - 1)) & ~(alignment - 1);
 	}
 
+	// Maps block size to bin index via Log2(size) − 4.
+	// The −4 normalises because the minimum block is 16 bytes and Log2(16) = 4,
+	// so bin 0 covers [16, 32), bin 1 covers [32, 64), etc., up to bin 15 which is clamped for all larger blocks.
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	private static int BinIndexForSize(int size)
 	{
@@ -178,6 +196,9 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		}
 	}
 
+	// Merges with the immediately-following block if it is already free.
+	// The BumpOffset guard prevents us from scanning past the bump into uninitialised memory
+	// (blocks beyond BumpOffset have no headers to read).
 	private void TryCoalesceForward(ref int offset, ref int size)
 	{
 		var successorOffset = offset + size;
@@ -198,6 +219,8 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		}
 	}
 
+	// Merges with the immediately-preceding block if it is already free.
+	// Scans all bins looking for a free block whose end address equals our start.
 	private void TryCoalesceBackward(ref int offset, ref int size)
 	{
 		for (var b = 0; b < binHeads.Length; b++) {

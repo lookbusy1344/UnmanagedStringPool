@@ -35,6 +35,11 @@ internal sealed class SegmentedArenaTier : IDisposable
 		}
 	}
 
+	/// <summary>
+	/// Allocates <paramref name="byteCount"/> bytes from the first segment that can satisfy the request.
+	/// If no existing segment has room, a new one is appended. New segments are sized as
+	/// <c>max(defaultSegmentBytes, byteCount)</c> so a single oversized string gets its own dedicated segment.
+	/// </summary>
 	public IntPtr Allocate(int byteCount, out SegmentedArenaSegment owningSegment)
 	{
 		foreach (var s in segments) {
@@ -51,9 +56,17 @@ internal sealed class SegmentedArenaTier : IDisposable
 		return newPtr;
 	}
 
+	/// <summary>
+	/// Frees a block back to its owning segment. The caller must supply the segment directly
+	/// (resolved by <see cref="LocateSegmentByPointer"/>) so this method stays O(1).
+	/// </summary>
 	public static void Free(IntPtr ptr, int byteCount, SegmentedArenaSegment segment) =>
 		segment.Free(ptr, byteCount);
 
+	/// <summary>
+	/// Returns the segment that owns <paramref name="ptr"/>. O(number of segments).
+	/// Called only during <see cref="Free"/>, not on the read path.
+	/// </summary>
 	public SegmentedArenaSegment LocateSegmentByPointer(IntPtr ptr)
 	{
 		foreach (var s in segments) {
@@ -64,6 +77,10 @@ internal sealed class SegmentedArenaTier : IDisposable
 		throw new InvalidOperationException("Pointer does not belong to any arena segment");
 	}
 
+	/// <summary>
+	/// Resets every segment's bump pointer and bin heads without freeing unmanaged memory.
+	/// Used by <c>pool.Clear()</c>; segments are reused for subsequent allocations.
+	/// </summary>
 	public void ResetAll()
 	{
 		foreach (var s in segments) {

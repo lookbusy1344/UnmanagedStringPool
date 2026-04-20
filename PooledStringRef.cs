@@ -12,6 +12,7 @@ using System.Buffers;
 /// </summary>
 public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef>
 {
+	// Stack-allocate match positions for up to this many occurrences before renting from ArrayPool.
 	private const int ReplaceInlineMatchCap = 64;
 
 	public PooledStringRef(SegmentedStringPool? pool, uint slotIndex, uint generation)
@@ -27,6 +28,8 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 
 	public static PooledStringRef Empty => default;
 
+	// All three fields must be checked: a non-null Pool with SlotIndex=0 and Generation=0 would be a valid slot 0
+	// whose generation counter hasn't been bumped yet (fresh pool, no alloc) — that is not the empty sentinel.
 	public bool IsEmpty => Pool is null && SlotIndex == 0u && Generation == 0u;
 
 	public int Length => IsEmpty ? 0 : Pool!.GetLength(SlotIndex, Generation);
@@ -191,6 +194,9 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 		_ => false,
 	};
 
+	// Intentionally samples only the first and last 8 chars plus the length to keep hashing O(1) for large strings.
+	// This is a speed/distribution tradeoff: hash quality degrades for strings that differ only in the middle,
+	// but avoids O(n) cost for very long strings stored in the pool.
 	public override int GetHashCode()
 	{
 		var span = AsSpan();

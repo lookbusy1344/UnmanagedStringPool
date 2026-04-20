@@ -32,10 +32,11 @@ internal sealed class SegmentedSlab : IDisposable
 		Buffer = Marshal.AllocHGlobal(cellBytes * cellCount);
 		var words = (cellCount + 63) / 64;
 		bitmap = new ulong[words];
+		// Convention: 1=free, 0=used. Start fully free.
 		for (var w = 0; w < words; w++) {
 			bitmap[w] = ulong.MaxValue;
 		}
-		// Clear bits beyond CellCount if not a multiple of 64
+		// Phantom bits past CellCount in the last word must be cleared so tzcnt never picks a non-existent cell.
 		var excess = (words * 64) - cellCount;
 		if (excess > 0) {
 			bitmap[^1] &= (1UL << (64 - excess)) - 1UL;
@@ -49,17 +50,22 @@ internal sealed class SegmentedSlab : IDisposable
 
 	public SegmentedSlab? NextInClass { get; set; }
 
+	/// <summary>
+	/// Allocates the first free cell using <see cref="BitOperations.TrailingZeroCount"/> to find the lowest set bit
+	/// (set = free under the 1=free convention). Returns false if the slab is full.
+	/// </summary>
 	public bool TryAllocateCell(out int cellIndex)
 	{
 		for (var w = 0; w < bitmap.Length; w++) {
 			var word = bitmap[w];
 			if (word != 0UL) {
+				// tzcnt finds the lowest set (free) bit; on x86 this is a single instruction.
 				var bit = BitOperations.TrailingZeroCount(word);
 				cellIndex = (w * 64) + bit;
 				if (cellIndex >= CellCount) {
 					break;
 				}
-				bitmap[w] = word & ~(1UL << bit);
+				bitmap[w] = word & ~(1UL << bit); // flip free→used
 				--freeCells;
 				return true;
 			}
@@ -68,6 +74,7 @@ internal sealed class SegmentedSlab : IDisposable
 		return false;
 	}
 
+	/// <summary>Marks a cell free by setting its bitmap bit. Throws if the cell is already free (double-free guard).</summary>
 	public void FreeCell(int cellIndex)
 	{
 		if ((uint)cellIndex >= (uint)CellCount) {
@@ -97,6 +104,10 @@ internal sealed class SegmentedSlab : IDisposable
 		return raw >= start && raw < end;
 	}
 
+	/// <summary>
+	/// Resets the bitmap to all-free without freeing the unmanaged buffer. Used by <c>pool.Clear()</c> to
+	/// reclaim cell space while reusing the already-allocated slab memory.
+	/// </summary>
 	public void ResetAllCellsFree()
 	{
 		for (var w = 0; w < bitmap.Length; w++) {
