@@ -764,199 +764,609 @@ the chain.
 
 ### 6.1 Allocating a tiny string: `pool.Allocate("Hi")` (2 chars)
 
-**State before:** Fresh pool, nothing allocated yet. All chains empty, all
-segments empty, slot table has 64 pre-allocated entries (all zeroed).
+**State before:** Fresh pool. All chains empty, no segments, slot table
+has 64 zeroed entries, `freeHead = NoFreeSlot`, `highWater = 0`.
 
-| Step | What happens | Effect on data structures |
-|------|-------------|--------------------------|
-| 1 | `Allocate` called with 2-char span | Pool checks: `2 ≤ 128` → slab tier |
-| 2 | `slabTier.Allocate(2)` called | `ChooseSizeClass(2) = 0` (8-char cells, 16 bytes each) |
-| 3 | `activeSlabs[0]` is null | First allocation in this size class! |
-| 4 | `AllocateNewSlab(0)` called | Creates a new `SegmentedSlab(cellBytes=16, cellCount=256)`. Allocates `16 × 256 = 4,096 bytes` via `Marshal.AllocHGlobal`. Bitmap: 4 `ulong` words, all bits set to 1. Slab added to `allSlabs` list and linked as head of `activeSlabs[0]`. |
-| 5 | `slab.TryAllocateCell()` | `tzcnt(bitmap[0])` = 0 → picks cell 0. Flips bit 0 to 0 in `bitmap[0]`. `freeCells` drops from 256 to 255. |
-| 6 | Cell pointer computed | `slab.Buffer + (0 × 16) = slab.Buffer` — the first 16 bytes of the slab. |
-| 7 | String data copied | `"Hi"` → 4 bytes (2 chars × 2 bytes/char) written into cell 0's first 4 bytes. The remaining 12 bytes of the 16-byte cell are unused. |
-| 8 | Pointer tagged | `(ptr & ~7) | 0` → bit 0 stays 0 (slab tier). |
-| 9 | `slots.Allocate(taggedPtr, 2)` | `freeHead` is `NoFreeSlot` (chain empty), so uses `highWater = 0` → slot index 0. `highWater` bumps to 1. Generation set to `0x0000_0001` (counter=1, free flag clear). `activeCount` becomes 1. |
-| 10 | Returns `PooledStringRef(pool, 0, 1)` | Caller receives 16-byte handle. |
+```
+pool.Allocate("Hi")
+ │
+ │  Route to tier
+ ├─ 2 ≤ 128 → slab tier
+ │
+ │  Pick size class
+ ├─ ChooseSizeClass(2) = 0  →  8-char cells (16 bytes each)
+ │
+ │  Find a slab with space
+ ├─ activeSlabs[0] is null  →  no slab exists yet for this class
+ │   │
+ │   └─ AllocateNewSlab(0)
+ │       ├─ new SegmentedSlab(cellBytes=16, cellCount=256)
+ │       ├─ Marshal.AllocHGlobal(16 × 256 = 4,096 bytes)
+ │       ├─ bitmap: 4 × ulong, all bits = 1 (every cell free)
+ │       ├─ allSlabs.Add(slab)                ← tracked in flat list
+ │       └─ LinkAtHead(0, slab)               ← slab becomes chain head
+ │
+ │          Slab chain after:
+ │          activeSlabs[0] ──→ SlabA ──→ null
+ │
+ │  Allocate a cell
+ ├─ slab.TryAllocateCell()
+ │   ├─ tzcnt(bitmap[0]) = 0              → picks cell 0
+ │   ├─ bitmap[0] &= ~(1UL << 0)          → bit 0 flipped to 0 (used)
+ │   └─ freeCells: 256 → 255
+ │
+ │  Compute pointer
+ ├─ ptr = slab.Buffer + (0 × 16)          → first 16 bytes of buffer
+ │
+ │  Copy string data
+ ├─ "Hi" → 4 bytes (2 chars × 2 B/char)   → written into cell 0
+ │   (remaining 12 bytes of the 16-byte cell are unused)
+ │
+ │  Tag the pointer
+ ├─ taggedPtr = (ptr & ~7) | 0             → bit 0 = 0 (slab tier)
+ │
+ │  Allocate a slot
+ ├─ slots.Allocate(taggedPtr, lengthChars=2)
+ │   ├─ freeHead = NoFreeSlot (empty chain) → use highWater
+ │   ├─ slotIndex = 0,  highWater: 0 → 1
+ │   ├─ generation = ClearFreeAndBumpGen(0x00000000) = 0x00000001
+ │   ├─ slot[0] = { Ptr=taggedPtr, LengthChars=2, Generation=0x00000001 }
+ │   └─ activeCount: 0 → 1
+ │
+ │      Slot table after:
+ │      [0] Ptr=→SlabA:cell0  Len=2  Gen=0x00000001 (live)
+ │      [1…63] (zeroed, never touched)
+ │      freeHead = NoFreeSlot,  highWater = 1
+ │
+ │  Is slab now full?
+ ├─ freeCells = 255 → no → slab stays on chain
+ │
+ └─ return PooledStringRef(pool, slotIndex=0, generation=1)
+```
 
-**State after:**
-- 1 slab exists (4,096 bytes unmanaged), 255 of 256 cells free
-- `activeSlabs[0]` → this slab (slab is not full, stays on chain)
-- Slot 0: `Ptr = tagged pointer to cell 0`, `LengthChars = 2`, `Generation = 1`
-- All other `activeSlabs` entries still null — no other size classes touched
+**State after:** 1 slab (4,096 B unmanaged), 255 free cells,
+`activeSlabs[0]` → SlabA. 1 slot used. All other size classes untouched.
 
 ### 6.2 Allocating a medium string: `pool.Allocate("Hello World!")` (12 chars)
 
-**State before:** Same as after §6.1 (one slab in class 0, one slot used).
+**State before:** One slab in class 0 (from §6.1), one slot used.
 
-| Step | What happens | Effect |
-|------|-------------|--------|
-| 1 | `12 ≤ 128` → slab tier | |
-| 2 | `ChooseSizeClass(12) = 1` | 16-char cells, 32 bytes each |
-| 3 | `activeSlabs[1]` is null | First allocation in class 1 |
-| 4 | New slab created | `SegmentedSlab(cellBytes=32, cellCount=256)` → `32 × 256 = 8,192 bytes` of unmanaged memory. Added to `allSlabs` (now 2 slabs total). Linked as `activeSlabs[1]` head. |
-| 5 | Cell 0 allocated via bitmap | 24 bytes of string data (`12 × 2`) written into the 32-byte cell. 8 bytes wasted. |
-| 6 | Pointer tagged with tier 0 | |
-| 7 | Slot 1 allocated | `highWater` bumps to 2. Generation = 1. |
-| 8 | Returns `PooledStringRef(pool, 1, 1)` | |
+```
+pool.Allocate("Hello World!")
+ │
+ │  Route to tier
+ ├─ 12 ≤ 128 → slab tier
+ │
+ │  Pick size class
+ ├─ ChooseSizeClass(12) = 1  →  16-char cells (32 bytes each)
+ │
+ │  Find a slab with space
+ ├─ activeSlabs[1] is null  →  first allocation in this size class
+ │   │
+ │   └─ AllocateNewSlab(1)
+ │       ├─ new SegmentedSlab(cellBytes=32, cellCount=256)
+ │       ├─ Marshal.AllocHGlobal(32 × 256 = 8,192 bytes)
+ │       ├─ allSlabs.Add(slab)                ← now 2 slabs in flat list
+ │       └─ LinkAtHead(1, slab)
+ │
+ │          Slab chains after:
+ │          activeSlabs[0] ──→ SlabA ──→ null      (unchanged)
+ │          activeSlabs[1] ──→ SlabB ──→ null      (new)
+ │          activeSlabs[2…4] = null
+ │
+ │  Allocate cell, copy data
+ ├─ cell 0 picked via tzcnt
+ ├─ "Hello World!" → 24 bytes written into the 32-byte cell (8 bytes wasted)
+ │
+ │  Tag pointer, allocate slot
+ ├─ taggedPtr = (ptr & ~7) | 0             → tier 0 (slab)
+ ├─ slotIndex = 1,  highWater: 1 → 2,  generation = 0x00000001
+ │
+ │      Slot table after:
+ │      [0] Ptr=→SlabA:cell0  Len=2   Gen=0x00000001 (live)
+ │      [1] Ptr=→SlabB:cell0  Len=12  Gen=0x00000001 (live)
+ │      freeHead = NoFreeSlot,  highWater = 2
+ │
+ └─ return PooledStringRef(pool, slotIndex=1, generation=1)
+```
 
-**State after:** Two slabs exist in different size classes. The pool has
-allocated 12,288 bytes of unmanaged memory total (4,096 + 8,192) to hold
-just 28 bytes of string data. This up-front cost amortises over the next
-~510 allocations that will fit into the existing slabs with zero further
+**State after:** 12,288 B of unmanaged memory (4,096 + 8,192) holding
+28 B of actual string data. The up-front cost amortises — the next ~510
+small allocations will fit into existing slabs with zero further
 unmanaged allocation.
 
-### 6.3 Allocating a large string: `pool.Allocate(doc)` where `doc` is 5,000 chars
+### 6.3 Allocating a large string: `pool.Allocate(doc)` (5,000 chars)
 
-**State before:** Two slabs from §6.1–6.2, two slots used.
+**State before:** Two slabs from §6.1–6.2, two slots used. No arena
+segments yet.
 
-| Step | What happens | Effect |
-|------|-------------|--------|
-| 1 | `5000 > 128` → arena tier | |
-| 2 | `byteCount = 5000 × 2 = 10,000` | After 8-byte alignment: 10,000 bytes (already aligned). |
-| 3 | `arenaTier.Allocate(10000)` | Iterates `segments` list — empty, no segments exist yet. |
-| 4 | New segment created | `SegmentedArenaSegment(max(1048576, 10000))` → 1 MB buffer via `Marshal.AllocHGlobal`. `BumpOffset = 0`. All 16 `binHeads` set to -1 (no free blocks). |
-| 5 | `segment.TryAllocate(10000)` | Bins are all empty → falls through to bump allocator. `BumpOffset (0) + 10000 ≤ 1048576` → returns `Buffer + 0`. `BumpOffset` advances to 10,000. |
-| 6 | 10,000 bytes of string data copied | Written at the start of the 1 MB segment buffer. |
-| 7 | Pointer tagged with tier 1 | `(ptr & ~7) | 1` → bit 0 set to 1 (arena tier). |
-| 8 | Slot 2 allocated | `highWater` bumps to 3. Generation = 1. |
-| 9 | Returns `PooledStringRef(pool, 2, 1)` | |
+```
+pool.Allocate(doc)   // doc is 5,000 chars
+ │
+ │  Route to tier
+ ├─ 5000 > 128 → arena tier
+ │
+ │  Compute byte count
+ ├─ 5000 × 2 = 10,000 bytes (already 8-byte aligned)
+ │
+ │  Search existing segments
+ ├─ arenaTier.Allocate(10000)
+ │   ├─ segments list is empty → no segments to try
+ │   │
+ │   │  Create first segment
+ │   ├─ capacity = max(1,048,576,  10,000) = 1,048,576  (1 MB)
+ │   ├─ new SegmentedArenaSegment(1,048,576)
+ │   │   ├─ Marshal.AllocHGlobal(1,048,576)
+ │   │   ├─ BumpOffset = 0
+ │   │   └─ binHeads[0…15] = -1  (all bins empty)
+ │   ├─ segments.Add(segment)
+ │   │
+ │   │  Allocate within the new segment
+ │   └─ segment.TryAllocate(10000)
+ │       ├─ startBin = Log2(10000) - 4 = 13 - 4 = 9
+ │       ├─ walk binHeads[9…15] → all -1, no free blocks
+ │       ├─ bump fallback: BumpOffset(0) + 10000 ≤ 1,048,576 ✓
+ │       ├─ ptr = Buffer + 0
+ │       └─ BumpOffset: 0 → 10,000
+ │
+ │          Segment layout after:
+ │          ┌────────────────────┬──────────────────────────────┐
+ │          │ doc (10,000 B)     │ (unused: 1,038,576 B)        │
+ │          │ live               │                    ← Bump    │
+ │          └────────────────────┴──────────────────────────────┘
+ │
+ │  Copy 10,000 bytes of UTF-16 data into segment buffer
+ │
+ │  Tag the pointer
+ ├─ taggedPtr = (ptr & ~7) | 1             → bit 0 = 1 (arena tier)
+ │
+ │  Allocate a slot
+ ├─ slotIndex = 2,  highWater: 2 → 3,  generation = 0x00000001
+ │
+ │      Slot table after:
+ │      [0] Ptr=→SlabA:cell0   Len=2     Gen=0x00000001 (slab, live)
+ │      [1] Ptr=→SlabB:cell0   Len=12    Gen=0x00000001 (slab, live)
+ │      [2] Ptr=→Seg0:offset0  Len=5000  Gen=0x00000001 (arena, live)
+ │      freeHead = NoFreeSlot,  highWater = 3
+ │
+ └─ return PooledStringRef(pool, slotIndex=2, generation=1)
+```
 
-**State after:** The arena tier now has 1 segment with `BumpOffset = 10000`.
-The remaining ~1,038,576 bytes of the segment are available for future large
-string allocations without creating a new segment.
-
-### 6.4 Allocating a very large string: `pool.Allocate(huge)` where `huge` is 600,000 chars
+### 6.4 Allocating a very large string: `pool.Allocate(huge)` (600,000 chars)
 
 This string is 1,200,000 bytes — larger than the default 1 MB segment.
 
-| Step | What happens | Effect |
-|------|-------------|--------|
-| 1 | `600000 > 128` → arena tier | |
-| 2 | `byteCount = 600000 × 2 = 1,200,000` | |
-| 3 | Try existing segment (1 MB from §6.3) | `BumpOffset (10000) + 1200000 > 1048576` → doesn't fit. Bins are empty → no free block either. Fails. |
-| 4 | New segment created | `max(1048576, 1200000) = 1,200,000` → a 1.2 MB segment, sized exactly for this string. |
-| 5 | Bump allocation in new segment | Returns `Buffer + 0`. `BumpOffset` advances to 1,200,000. This segment is now completely full — `BumpOffset == Capacity`. |
-| 6 | Tag, slot allocate, return ref | |
+```
+pool.Allocate(huge)   // 600,000 chars = 1,200,000 bytes
+ │
+ ├─ 600000 > 128 → arena tier
+ ├─ byteCount = 1,200,000
+ │
+ │  Try existing segment (Seg0, 1 MB from §6.3)
+ ├─ segment.TryAllocate(1200000)
+ │   ├─ walk bins → no free block ≥ 1,200,000
+ │   ├─ bump: BumpOffset(10000) + 1,200,000 > 1,048,576 → doesn't fit
+ │   └─ return false
+ │
+ │  Create oversized segment
+ ├─ capacity = max(1,048,576,  1,200,000) = 1,200,000
+ ├─ new SegmentedArenaSegment(1,200,000)
+ │   ├─ Marshal.AllocHGlobal(1,200,000)  ← segment sized exactly for this string
+ │   └─ BumpOffset = 0
+ │
+ │  Allocate within new segment
+ ├─ ptr = Buffer + 0
+ ├─ BumpOffset: 0 → 1,200,000            ← segment is now completely full
+ │
+ │      Segments after:
+ │      segments[0] = Seg0 (1 MB,  BumpOffset=10000,   1,038,576 B available)
+ │      segments[1] = Seg1 (1.2 MB, BumpOffset=1200000, 0 B available)
+ │
+ │      Future large allocations try Seg0 first (has space).
+ │
+ ├─ tag, slot allocate (slotIndex=3), return ref
+ └─ return PooledStringRef(pool, slotIndex=3, generation=1)
+```
 
-**State after:** Two segments exist — the original 1 MB (with 1,038,576
-bytes still available) and the new 1.2 MB (completely full). Future large
-allocations will try the first segment first (has space), only creating new
-segments if needed.
+### 6.5 Allocating into an existing slab (reuse, no new slab)
 
-### 6.5 Freeing a small string
+**State before:** SlabA (class 0, 8-char cells) has 200 free cells.
+`activeSlabs[0]` → SlabA.
+
+```
+pool.Allocate("OK")   // 2 chars, same size class as §6.1
+ │
+ ├─ 2 ≤ 128 → slab tier
+ ├─ ChooseSizeClass(2) = 0
+ │
+ │  Find a slab — chain head exists
+ ├─ activeSlabs[0] = SlabA  →  has free cells, use it directly
+ │   (no new slab created — this is the fast path)
+ │
+ │  Allocate a cell
+ ├─ slab.TryAllocateCell()
+ │   ├─ tzcnt finds first free bit → cell N
+ │   ├─ flip bit to 0
+ │   └─ freeCells: 200 → 199
+ │
+ │  Is slab now full?
+ ├─ 199 > 0 → no → slab stays on chain
+ │
+ │      Slab chain (unchanged):
+ │      activeSlabs[0] ──→ SlabA ──→ null
+ │
+ ├─ tag pointer, allocate slot, return ref
+ └─ return PooledStringRef(pool, slotIndex=N, generation=1)
+```
+
+### 6.6 Allocating the last cell (slab fills, detaches from chain)
+
+**State before:** SlabA (class 0) has exactly 1 free cell. Another slab
+(SlabB, also class 0) has free cells behind it in the chain.
+
+```
+pool.Allocate("ab")   // 2 chars → class 0
+ │
+ ├─ activeSlabs[0] = SlabA (1 free cell)
+ │
+ │  Allocate the last cell
+ ├─ slab.TryAllocateCell()
+ │   ├─ tzcnt picks the last free bit
+ │   └─ freeCells: 1 → 0
+ │
+ │  Is slab now full?
+ ├─ freeCells == 0 → YES
+ │   │
+ │   └─ DetachHead(0)
+ │       ├─ activeSlabs[0] = SlabA.NextInClass  → SlabB
+ │       └─ SlabA.NextInClass = null
+ │
+ │          Slab chain BEFORE:
+ │          activeSlabs[0] ──→ SlabA ──→ SlabB ──→ null
+ │
+ │          Slab chain AFTER:
+ │          activeSlabs[0] ──→ SlabB ──→ null
+ │          SlabA is full — off the chain, but still in allSlabs
+ │
+ ├─ tag pointer, allocate slot, return ref
+ └─ return PooledStringRef(...)
+```
+
+SlabA is now invisible to future allocations (not on any chain), but is
+still tracked in `allSlabs` so that `LocateSlabByPointer` can find it
+during a future `Free`.
+
+---
+
+### 6.7 Freeing a small string (slab tier, slab not full)
 
 Continuing from §6.1: freeing the `PooledStringRef` for `"Hi"`.
 
-| Step | What happens | Effect |
-|------|-------------|--------|
-| 1 | `ref.Dispose()` → `pool.FreeSlot(0, 1)` | Checks `disposed` → false. |
-| 2 | `slots.TryReadSlot(0, 1)` | Slot 0 has generation 1 → match. Returns the entry. |
-| 3 | Untag pointer | `entry.Ptr & ~7` → raw pointer to cell 0 of the slab. `entry.Ptr & 1` → tier = 0 (slab). |
-| 4 | `slabTier.LocateSlabByPointer(raw)` | Iterates `allSlabs`, checks `slab.Contains(ptr)` by address range → finds the 8-char-class slab. |
-| 5 | `slabTier.Free(raw, slab)` | Computes `offset = ptr - slab.Buffer = 0`. `CellIndexFromOffset(0) = 0`. `wasFull = false` (slab had 255 free cells). `slab.FreeCell(0)` → sets bit 0 in `bitmap[0]` back to 1. `freeCells` becomes 256. |
-| 6 | Was the slab full before this free? | No (`wasFull = false`) → slab was already on the chain. No re-linking needed. |
-| 7 | `slots.Free(0, 1)` | Generation bumped: `0x0000_0001` → `0x8000_0002` (free flag set, counter = 2). `slot.Ptr` overwritten with `freeHead` value (for the free chain). `freeHead` set to 0. `activeCount` drops to 1 (if other allocations exist) or 0. |
-
-**State after:**
-- The slab still exists (memory is **not** freed). Cell 0 is marked free in
-  the bitmap and available for reuse.
-- Slot 0 is on the free chain. Its generation is now `0x8000_0002`. Any
-  `PooledStringRef` holding generation `0x0000_0001` will fail the
-  generation check and throw "stale or freed".
-- The slab's unmanaged buffer (`4,096 bytes`) persists until `pool.Dispose()`.
-
-### 6.6 Freeing a small string from a full slab (re-link scenario)
-
-Imagine size class 0 (8-char cells) with one slab, and all 256 cells have
-been allocated. The slab was detached from `activeSlabs[0]` when it filled.
-
-| Step | What happens | Effect |
-|------|-------------|--------|
-| 1 | Free one of the 256 strings | `pool.FreeSlot(slotIndex, gen)` |
-| 2 | Untag, locate slab | Same as §6.5 steps 2–4. |
-| 3 | `slabTier.Free(raw, slab)` | `wasFull = true` (slab had 0 free cells). |
-| 4 | `slab.FreeCell(cellIndex)` | Sets the bitmap bit back to 1. `freeCells` becomes 1. |
-| 5 | **Re-link at head** | Since `wasFull` was true, `LinkAtHead(0, slab)` is called. `slab.NextInClass = activeSlabs[0]` (which may be null or another slab). `activeSlabs[0] = slab`. The slab is back on the chain and available for allocation. |
-| 6 | Slot freed | Same as §6.5 step 7. |
-
-**State after:** `activeSlabs[0]` now points to this slab. The next small
-string allocation (≤8 chars) will find it immediately and use its one free
-cell via `tzcnt`.
-
-### 6.7 Freeing a large string (arena tier)
-
-Continuing from §6.3: freeing the 5,000-char document.
-
-| Step | What happens | Effect |
-|------|-------------|--------|
-| 1 | `pool.FreeSlot(2, 1)` | Generation check passes. |
-| 2 | Untag: `tier = 1` (arena) | |
-| 3 | `arenaTier.LocateSegmentByPointer(raw)` | Iterates segments, checks `segment.Contains(ptr)` by address range → finds the first 1 MB segment. |
-| 4 | `segment.Free(ptr, 10000)` | `offset = ptr - Buffer = 0`. `size = AlignSize(10000) = 10000`. |
-| 5 | `TryCoalesceForward(ref 0, ref 10000)` | Checks if there's a free block at offset `0 + 10000 = 10000`. Since `BumpOffset = 10000` and `10000 >= BumpOffset`, the successor is past the bump — returns immediately. Nothing to coalesce. |
-| 6 | `TryCoalesceBackward(ref 0, ref 10000)` | Looks for a free block `X` where `X.offset + X.SizeBytes == 0`. No such block exists (this was the first allocation). Returns immediately. |
-| 7 | Write free block header at offset 0 | `SizeBytes = 10000`, `NextOffset = -1`, `PrevOffset = -1`, `BinIndex = Log2(10000) - 4 = 13 - 4 = 9`. The first 16 bytes of the freed 10,000-byte block now hold this header. The string data is overwritten. |
-| 8 | `LinkIntoBin(0)` | `binHeads[9]` was -1 (empty) → now `binHeads[9] = 0`. This 10,000-byte free block is now the head (and only entry) of bin 9. |
-| 9 | Slot 2 freed | Same generation bump and free-chain push as the slab case. |
-
-**State after:**
-- The segment still exists (1 MB of unmanaged memory, not freed).
-- Bytes 0–9,999 are now a free block on bin 9. The string's UTF-16 data is
-  gone — the first 16 bytes hold the link header, the rest are garbage.
-- A future allocation of ~5,000–8,191 chars (10,000–16,383 bytes) would
-  find this block via bin 9 and reuse it.
-- `BumpOffset` is still 10,000 — bump allocation would continue from there
-  for requests that don't fit in the free block.
-
-### 6.8 Freeing adjacent arena blocks (coalescing)
-
-Suppose a segment has three consecutive allocations: A (1,024 B at offset
-0), B (2,048 B at offset 1,024), C (512 B at offset 3,072). `BumpOffset`
-is 3,584.
-
-**Free B first, then A:**
-
 ```
-After freeing B:
-  No adjacent free blocks → B becomes a free block at offset 1024, size 2048.
-  binHeads[7] = 1024  (bin 7 covers [128, 256) but Log2(2048)-4 = 11-4 = 7)
+ref.Dispose()   // ref = PooledStringRef(pool, slotIndex=0, generation=1)
+ │
+ └─ pool.FreeSlot(slotIndex=0, generation=1)
+     │
+     │  Validate the slot
+     ├─ disposed? → false
+     ├─ slots.TryReadSlot(0, 1)
+     │   ├─ slots[0].Generation = 0x00000001
+     │   ├─ 0x00000001 == 1 → match ✓
+     │   └─ returns { Ptr=taggedPtr, LengthChars=2, Gen=0x00000001 }
+     │
+     │  Decode which tier
+     ├─ raw  = entry.Ptr & ~7     → raw pointer to cell 0 of SlabA
+     ├─ tier = entry.Ptr & 1      → 0 (slab tier)
+     │
+     │  ── SLAB TIER FREE ──
+     │
+     │  Find the owning slab
+     ├─ slabTier.LocateSlabByPointer(raw)
+     │   └─ iterates allSlabs → SlabA.Contains(raw) = true → found
+     │
+     │  Free the cell
+     ├─ slabTier.Free(raw, SlabA)
+     │   ├─ wasFull = SlabA.IsFull → false (had 255 free cells)
+     │   ├─ offset = raw - SlabA.Buffer = 0
+     │   ├─ cellIndex = offset / 16 = 0
+     │   ├─ SlabA.FreeCell(0)
+     │   │   ├─ bitmap[0] |= (1UL << 0)       → bit 0 back to 1 (free)
+     │   │   └─ freeCells: 255 → 256
+     │   │
+     │   │  Was it full before? → no
+     │   └─ wasFull = false → no chain re-link needed
+     │
+     │      Slab chain (unchanged):
+     │      activeSlabs[0] ──→ SlabA ──→ null
+     │      (SlabA was already on the chain, still is)
+     │
+     │  Free the slot
+     └─ slots.Free(0, 1)
+         ├─ generation: 0x00000001 → MarkFreeAndBumpGen → 0x80000002
+         │                            (free flag set, counter bumped to 2)
+         ├─ slot[0].Ptr = freeHead (was NoFreeSlot)
+         ├─ freeHead = 0
+         └─ activeCount: N → N-1
 
-  Segment: [A live 1024B][B FREE 2048B][C live 512B]
+         Slot free chain after:
+         freeHead ──→ slot[0] ──→ 0xFFFFFFFF (end)
+         slot[0].Generation = 0x80000002 (freed)
 
-After freeing A:
-  TryCoalesceForward: is there a free block at offset 0 + 1024 = 1024?
-    Scans bins → finds B at offset 1024 in bin 7. Unlinks B.
-    size = 1024 + 2048 = 3072.
-  TryCoalesceBackward: is there a free block ending at offset 0? No.
-  Writes header at offset 0, size 3072 → bin index = Log2(3072)-4 = 11-4 = 7.
-  Links into bin 7.
-
-  Segment: [A+B COALESCED FREE 3072B][C live 512B]
+         Any PooledStringRef still holding generation=1 now fails:
+           slots[0].Generation(0x80000002) ≠ 1 → "stale or freed"
 ```
 
-Without coalescing, two adjacent free blocks of 1,024 + 2,048 bytes could
-never satisfy a single 2,500-byte allocation. Coalescing merges them into
-one 3,072-byte block that can.
+**What happened to the slab?** Nothing — SlabA still exists with its full
+4,096 B buffer. Cell 0 is now marked free in the bitmap and will be reused
+by the next allocation in size class 0. Slab memory is never returned to
+the OS until `pool.Dispose()`.
 
-**Then free C:**
+### 6.8 Freeing a small string from a full slab (re-link into chain)
+
+**State before:** SlabA (class 0) is completely full (0 free cells). It was
+detached from the chain when it filled (§6.6). SlabB is the current chain
+head.
 
 ```
-After freeing C:
-  TryCoalesceForward: offset 3072 + 512 = 3584 = BumpOffset → nothing beyond.
-  TryCoalesceBackward: is there a free block ending at offset 3072?
-    Scans bins → finds the coalesced A+B block at offset 0, size 3072.
-    0 + 3072 == 3072 ✓. Unlinks it.
-    offset = 0, size = 3072 + 512 = 3584.
-  Writes header at offset 0, size 3584 → Links into appropriate bin.
+ref.Dispose()   // freeing a string that lives in SlabA
+ │
+ └─ pool.FreeSlot(slotIndex, generation)
+     │
+     ├─ validate slot, decode tier = 0 (slab)
+     │
+     │  Find the owning slab
+     ├─ slabTier.LocateSlabByPointer(raw) → SlabA
+     │
+     │  Free the cell
+     ├─ slabTier.Free(raw, SlabA)
+     │   ├─ wasFull = SlabA.IsFull → TRUE (0 free cells)
+     │   │
+     │   ├─ SlabA.FreeCell(cellIndex)
+     │   │   ├─ bitmap bit flipped back to 1
+     │   │   └─ freeCells: 0 → 1
+     │   │
+     │   │  Was it full before? → YES → re-link!
+     │   └─ LinkAtHead(0, SlabA)
+     │       ├─ SlabA.NextInClass = activeSlabs[0]  → SlabB
+     │       └─ activeSlabs[0] = SlabA
+     │
+     │          Slab chain BEFORE:
+     │          activeSlabs[0] ──→ SlabB ──→ null
+     │          (SlabA was full, off the chain entirely)
+     │
+     │          Slab chain AFTER:
+     │          activeSlabs[0] ──→ SlabA ──→ SlabB ──→ null
+     │          (SlabA is back — it has 1 free cell, so the invariant holds)
+     │
+     │  Free the slot
+     └─ slots.Free(slotIndex, generation)
+         └─ (same generation bump + free-chain push as §6.7)
+```
 
-  Segment: [A+B+C ALL COALESCED FREE 3584B]  (BumpOffset still 3584)
+The next allocation in size class 0 will find SlabA at the chain head and
+use its 1 free cell via `tzcnt`. If that fills SlabA again, it will be
+detached once more, and SlabB will become head again.
+
+---
+
+### 6.9 Freeing a large string (arena tier)
+
+Continuing from §6.3: freeing the 5,000-char document (10,000 bytes at
+offset 0 in Seg0).
+
+```
+ref.Dispose()   // ref points to slot 2, which holds the doc
+ │
+ └─ pool.FreeSlot(slotIndex=2, generation=1)
+     │
+     ├─ validate slot → match ✓
+     ├─ raw  = entry.Ptr & ~7    → raw pointer into Seg0
+     ├─ tier = entry.Ptr & 1     → 1 (arena tier)
+     │
+     │  ── ARENA TIER FREE ──
+     │
+     │  Find the owning segment
+     ├─ arenaTier.LocateSegmentByPointer(raw)
+     │   └─ iterates segments → Seg0.Contains(raw) = true → found
+     │
+     │  Free the block
+     ├─ SegmentedArenaTier.Free(raw, byteCount=10000, Seg0)
+     │   │
+     │   ├─ offset = raw - Seg0.Buffer = 0
+     │   ├─ size = AlignSize(10000) = 10000  (already 8-byte aligned)
+     │   │
+     │   │  Try coalescing with neighbours
+     │   ├─ TryCoalesceForward(ref offset=0, ref size=10000)
+     │   │   ├─ successor would be at offset 0 + 10000 = 10000
+     │   │   ├─ 10000 >= BumpOffset(10000) → nothing beyond the bump
+     │   │   └─ no coalescing
+     │   │
+     │   ├─ TryCoalesceBackward(ref offset=0, ref size=10000)
+     │   │   ├─ looking for a free block X where X.offset + X.size == 0
+     │   │   ├─ scan all 16 bins → nothing ends at offset 0
+     │   │   └─ no coalescing
+     │   │
+     │   │  Write free-block header into the freed memory
+     │   ├─ WriteHeader(offset=0, {
+     │   │     SizeBytes  = 10000,
+     │   │     NextOffset = -1,
+     │   │     PrevOffset = -1,
+     │   │     BinIndex   = Log2(10000) - 4 = 13 - 4 = 9
+     │   │   })
+     │   │   The first 16 bytes of what was the doc's UTF-16 data
+     │   │   are now overwritten with this link header.
+     │   │
+     │   │  Link into the appropriate bin
+     │   └─ LinkIntoBin(offset=0)
+     │       ├─ binHeads[9] was -1 (empty)
+     │       └─ binHeads[9] = 0
+     │
+     │          Segment bins after:
+     │          binHeads[0…8]  = -1
+     │          binHeads[9]    = 0   ←── free block: 10,000 B at offset 0
+     │          binHeads[10…15] = -1
+     │
+     │          Segment layout after:
+     │          ┌──────────────────────┬────────────────────────────┐
+     │          │ FREE BLOCK (10,000 B)│ (unused: 1,038,576 B)     │
+     │          │ header + garbage     │                  ← Bump   │
+     │          └──────────────────────┴────────────────────────────┘
+     │          BumpOffset still 10,000 — bump continues from there.
+     │
+     │  Free the slot
+     └─ slots.Free(2, 1)
+         └─ generation bumped, slot pushed onto free chain
+
+         A future 5,000–8,191 char allocation (10,000–16,383 bytes)
+         would find this block via bin 9 and reuse it directly.
+```
+
+**What happened to the segment?** Nothing — Seg0 still exists (1 MB of
+unmanaged memory). The freed region is now a free block threaded into
+bin 9. The string's UTF-16 data is gone — the first 16 bytes are a link
+header, the rest are garbage.
+
+### 6.10 Freeing adjacent arena blocks (coalescing)
+
+**Setup:** A segment has three consecutive allocations, then we free them
+in a deliberate order to show coalescing.
+
+```
+Segment state: three live blocks, BumpOffset = 3584
+
+┌──────────────┬──────────────────┬────────────┬───────────────────┐
+│ A (1,024 B)  │ B (2,048 B)      │ C (512 B)  │ (unused)          │
+│ offset 0     │ offset 1024      │ offset 3072│        ← Bump     │
+│ live         │ live             │ live       │                   │
+└──────────────┴──────────────────┴────────────┴───────────────────┘
+
+binHeads[0…15] = -1  (no free blocks)
+```
+
+**Step 1: Free B (middle block)**
+
+```
+Free B (2,048 B at offset 1024)
+ │
+ ├─ TryCoalesceForward: is there a free block at 1024 + 2048 = 3072?
+ │   └─ scan all bins → no free block at offset 3072 → nothing
+ │
+ ├─ TryCoalesceBackward: is there a free block ending at 1024?
+ │   └─ scan all bins → no block X where X.offset + X.size == 1024 → nothing
+ │
+ ├─ WriteHeader(1024, { SizeBytes=2048, BinIndex=Log2(2048)-4=11-4=7 })
+ └─ LinkIntoBin(1024) → binHeads[7] = 1024
+
+ ┌──────────────┬──────────────────┬────────────┬───────────────────┐
+ │ A (1,024 B)  │ B FREE (2,048 B) │ C (512 B)  │ (unused)          │
+ │ live         │ hdr+garbage      │ live       │                   │
+ └──────────────┴──────────────────┴────────────┴───────────────────┘
+ binHeads[7] ──→ @1024 (2048 B, prev=-1, next=-1)
+```
+
+**Step 2: Free A (left block — coalesces forward into B)**
+
+```
+Free A (1,024 B at offset 0)
+ │
+ ├─ TryCoalesceForward: is there a free block at 0 + 1024 = 1024?
+ │   ├─ scan bins → found! B is at offset 1024 in bin 7
+ │   ├─ UnlinkFromBin(1024)  →  binHeads[7] = -1  (B removed)
+ │   └─ size = 1024 + 2048 = 3072  (A absorbs B)
+ │
+ ├─ TryCoalesceBackward: is there a free block ending at 0?
+ │   └─ nothing ends at offset 0 → no
+ │
+ ├─ WriteHeader(0, { SizeBytes=3072, BinIndex=Log2(3072)-4=11-4=7 })
+ └─ LinkIntoBin(0) → binHeads[7] = 0
+
+ ┌─────────────────────────────────┬────────────┬───────────────────┐
+ │ A+B COALESCED FREE (3,072 B)    │ C (512 B)  │ (unused)          │
+ │ hdr at offset 0, size 3072      │ live       │                   │
+ └─────────────────────────────────┴────────────┴───────────────────┘
+ binHeads[7] ──→ @0 (3072 B, prev=-1, next=-1)
+
+ Without coalescing, two adjacent free blocks of 1,024 + 2,048 could
+ never satisfy a single 2,500-byte request. Now they can.
+```
+
+**Step 3: Free C (right block — coalesces backward into A+B)**
+
+```
+Free C (512 B at offset 3072)
+ │
+ ├─ TryCoalesceForward: is there a free block at 3072 + 512 = 3584?
+ │   └─ 3584 >= BumpOffset(3584) → past the bump, nothing there
+ │
+ ├─ TryCoalesceBackward: is there a free block ending at 3072?
+ │   ├─ scan bins → found! A+B at offset 0, size 3072
+ │   │   0 + 3072 == 3072 ✓
+ │   ├─ UnlinkFromBin(0)  →  binHeads[7] = -1  (A+B removed)
+ │   ├─ offset = 0  (adopt A+B's starting offset)
+ │   └─ size = 3072 + 512 = 3584  (everything merged)
+ │
+ ├─ WriteHeader(0, { SizeBytes=3584, BinIndex=Log2(3584)-4=11-4=7 })
+ └─ LinkIntoBin(0) → binHeads[7] = 0
+
+ ┌─────────────────────────────────────────────┬───────────────────┐
+ │ A+B+C ALL COALESCED FREE (3,584 B)          │ (unused)          │
+ │ single free block, offset 0, size 3584      │        ← Bump    │
+ └─────────────────────────────────────────────┴───────────────────┘
+ binHeads[7] ──→ @0 (3584 B, prev=-1, next=-1)
+ BumpOffset = 3584 (unchanged — bump never moves backwards)
 ```
 
 The entire used portion of the segment is now one contiguous free block.
-The next allocation that fits within 3,584 bytes will reuse this space
-without advancing the bump pointer.
+A future allocation ≤ 3,584 B will reuse this space directly without
+advancing the bump pointer.
+
+### 6.11 Arena allocation reusing a free block (with split)
+
+**State before:** Seg0 has one free block of 10,000 B at offset 0 (from
+§6.9) on bin 9. `BumpOffset = 10000`.
+
+```
+pool.Allocate(shortDoc)   // 200 chars = 400 bytes
+ │
+ ├─ 200 > 128 → arena tier
+ ├─ byteCount = 400,  AlignSize(400) = 400  (already aligned)
+ │
+ │  Search bins
+ ├─ startBin = Log2(400) - 4 = 8 - 4 = 4
+ ├─ walk binHeads[4…8] → all -1
+ ├─ binHeads[9] = 0 → free block at offset 0
+ │   │
+ │   ├─ ReadHeader(0) → { SizeBytes=10000 }
+ │   ├─ 10000 >= 400 ✓ → use this block
+ │   │
+ │   │  Unlink the block from bin 9
+ │   ├─ UnlinkFromBin(0) → binHeads[9] = -1
+ │   │
+ │   │  Split: remainder = 10000 - 400 = 9600 bytes (≥ 16, so split)
+ │   ├─ tailOffset = 0 + 400 = 400
+ │   ├─ WriteHeader(400, {
+ │   │     SizeBytes  = 9600,
+ │   │     BinIndex   = Log2(9600) - 4 = 13 - 4 = 9
+ │   │   })
+ │   ├─ LinkIntoBin(400) → binHeads[9] = 400
+ │   │
+ │   │  Return pointer to the taken portion
+ │   └─ ptr = Buffer + 0
+ │
+ │      Segment layout after:
+ │      ┌──────────┬─────────────────────┬─────────────────────────┐
+ │      │ shortDoc │ FREE (9,600 B)      │ (unused: 1,038,576 B)   │
+ │      │ 400 B    │ hdr at offset 400   │                ← Bump  │
+ │      │ live     │ on bin 9            │                         │
+ │      └──────────┴─────────────────────┴─────────────────────────┘
+ │      binHeads[9] ──→ @400 (9600 B)
+ │
+ ├─ tag pointer (tier=1), allocate slot, return ref
+ └─ return PooledStringRef(...)
+```
+
+The 10,000 B free block was split: 400 B taken for the new string, 9,600 B
+remainder re-linked as a new (smaller) free block in the same bin.
 
 ---
 
