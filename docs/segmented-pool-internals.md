@@ -328,7 +328,7 @@ A segment with `Capacity = 1,048,576` bytes (1 MB):
 Buffer (unmanaged, 1 MB):
 ┌─────────────────────────────────────────────────────────────────┐
 │ Block A   │ Block B  │ (free)   │ Block D   │    (unused)       │
-│ 400 B     │ 1024 B   │ 600 B   │ 2048 B    │                   │
+│ 400 B     │ 1024 B   │ 600 B    │ 2048 B    │                   │
 │ (live)    │ (live)   │ (freed)  │ (live)    │← BumpOffset       │
 └─────────────────────────────────────────────────────────────────┘
                                                ↑
@@ -354,13 +354,13 @@ overwritten with a `SegmentedFreeBlockHeader`:
 
 ```
 Live block:                          Free block:
-┌────────────────────────┐           ┌────────────────────────┐
-│ h e l l o   w o r l d  │           │ SizeBytes  (int)       │ ← 16-byte header
-│  ... UTF-16 chars ...  │           │ NextOffset (int, -1=end│    written directly
-│                        │           │ PrevOffset (int, -1=head    into the freed
-│                        │           │ BinIndex   (int)       │    memory
-│                        │           │ (remaining bytes idle) │
-└────────────────────────┘           └────────────────────────┘
+┌────────────────────────┐           ┌───────────────────-─────┐
+│ h e l l o   w o r l d  │           │ SizeBytes  (int)        │ ← 16-byte header
+│  ... UTF-16 chars ...  │           │ NextOffset (int, -1=end │    written directly
+│                        │           │ PrevOffset (int, -1=head│    into the freed
+│                        │           │ BinIndex   (int)        │    memory
+│                        │           │ (remaining bytes idle)  │
+└────────────────────────┘           └───────────────────-─────┘
 ```
 
 This is why the minimum block size is 16 bytes — a free block must be large
@@ -482,7 +482,7 @@ Each slot carries a `uint Generation`. Bit 31 is the free flag; the low
 
 ```
 generation : F cccccccc cccccccc cccccccc ccccccc
-             ^ └───────────── 31-bit counter ──┘
+             ^ └───────────── 31-bit counter ───┘
              │
              └─ bit 31: 1 = freed, 0 = live
 ```
@@ -526,7 +526,7 @@ needed. On x86 it lowers to a single `tzcnt`.
 
 ```
 bitmap[0] : 1111_1110 1111_0110    (low bit = cell 0, on the right)
-                          ^^^ used cells: 0 and 3
+                           ^  ^ used cells: 0 and 3
             tzcnt → bit 1 (lowest 1) → allocate cell 1
             mark used: word &= ~(1UL << 1)
 ```
@@ -1227,8 +1227,8 @@ ref.Dispose()   // ref points to slot 2, which holds the doc
      │
      │          Segment layout after:
      │          ┌──────────────────────┬────────────────────────────┐
-     │          │ FREE BLOCK (10,000 B)│ (unused: 1,038,576 B)     │
-     │          │ header + garbage     │                  ← Bump   │
+     │          │ FREE BLOCK (10,000 B)│ (unused: 1,038,576 B)      │
+     │          │ header + garbage     │                  ← Bump    │
      │          └──────────────────────┴────────────────────────────┘
      │          BumpOffset still 10,000 — bump continues from there.
      │
@@ -1329,7 +1329,7 @@ Free C (512 B at offset 3072)
 
  ┌─────────────────────────────────────────────┬───────────────────┐
  │ A+B+C ALL COALESCED FREE (3,584 B)          │ (unused)          │
- │ single free block, offset 0, size 3584      │        ← Bump    │
+ │ single free block, offset 0, size 3584      │        ← Bump     │
  └─────────────────────────────────────────────┴───────────────────┘
  binHeads[7] ──→ @0 (3584 B, prev=-1, next=-1)
  BumpOffset = 3584 (unchanged — bump never moves backwards)
@@ -1375,7 +1375,7 @@ pool.Allocate(shortDoc)   // 200 chars = 400 bytes
  │      Segment layout after:
  │      ┌──────────┬─────────────────────┬─────────────────────────┐
  │      │ shortDoc │ FREE (9,600 B)      │ (unused: 1,038,576 B)   │
- │      │ 400 B    │ hdr at offset 400   │                ← Bump  │
+ │      │ 400 B    │ hdr at offset 400   │                ← Bump   │
  │      │ live     │ on bin 9            │                         │
  │      └──────────┴─────────────────────┴─────────────────────────┘
  │      binHeads[9] ──→ @400 (9600 B)
@@ -1549,12 +1549,12 @@ pool.Clear()
  
              Segment layout BEFORE:
              ┌────────────────┬──────────┬──────────────────────────┐
-             │ live blocks    │ free blk │ (unused)       ← Bump   │
+             │ live blocks    │ free blk │ (unused)       ← Bump    │
              └────────────────┴──────────┴──────────────────────────┘
  
              Segment layout AFTER:
              ┌──────────────────────────────────────────────────────┐
-             │ (entire buffer available)                  ← Bump=0 │
+             │ (entire buffer available)                  ← Bump=0  │
              └──────────────────────────────────────────────────────┘
  
              The old string data is still physically in the buffer but
