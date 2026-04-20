@@ -1,5 +1,53 @@
 # SegmentedStringPool — Internals
 
+## At a glance
+
+The pool stores strings in two tiers of **unmanaged memory** — memory
+allocated outside the .NET GC via `Marshal.AllocHGlobal`, which calls
+the OS heap allocator (`malloc` on macOS/Linux, `HeapAlloc` on Windows).
+The returned `IntPtr` is a raw pointer to bytes the GC will never move,
+collect, or scan. This is the entire point: string data lives outside GC
+pressure.
+
+```
+                  ┌────────────────────────────────────────────────-──────┐
+                  │          SegmentedStringPool                          │
+                  │                                                       │
+                  │  ┌─────────────────────────────────────────────-────┐ │
+                  │  │  SLAB TIER  (small strings, ≤128 chars)          │ │
+                  │  │                                                  │ │
+                  │  │  5 size classes: 8 / 16 / 32 / 64 / 128 chars    │ │
+                  │  │       │                                          │ │
+                  │  │       ▼                                          │ │
+                  │  │  Per class: chain of slabs (linked list)         │ │
+                  │  │       │                                          │ │
+                  │  │       ▼                                          │ │
+                  │  │  Each slab: fixed-size cells (bitmap-tracked)    │ │
+                  │  │       │                                          │ │
+                  │  │       ▼                                          │ │
+                  │  │  Each cell: one small string                     │ │
+                  │  └──────────────────────────────────────────────-───┘ │
+                  │                                                       │
+                  │  ┌─────────────────────────────────────────────-────┐ │
+                  │  │  ARENA TIER  (large strings, >128 chars)         │ │
+                  │  │                                                  │ │
+                  │  │  List of fixed-size segments (~1 MB each)        │ │
+                  │  │       │                                          │ │
+                  │  │       ▼                                          │ │
+                  │  │  Each segment: variable-size blocks              │ │
+                  │  │       │        (bump alloc + free-list bins)     │ │
+                  │  │       ▼                                          │ │
+                  │  │  Each block: one large string                    │ │
+                  │  └─────────────────────────────────────────────-────┘ │
+                  │                                                       │
+                  │  All unmanaged buffers obtained via                   │
+                  │  Marshal.AllocHGlobal → OS heap (malloc / HeapAlloc)  │
+                  │  Pointers stored as tagged IntPtr in the slot table   │
+                  └──────────────────────────────────────────────────-────┘
+```
+
+---
+
 A walk through the data structures behind `SegmentedStringPool`, focused on
 the two recurring tricks: **bitmask reinterpretation** (multiple fields
 packed into one word; one field meaning two different things depending on
@@ -37,9 +85,9 @@ Layer diagram:
   Index layer:     SegmentedSlotTable  (managed array — maps slotIndex → tagged pointer + length)
                         │
                    ┌────┴────┐
-  Storage layer:   Slab      Arena Segment
-                   (cells)   (blocks)
-                        │
+  Storage layer:  Slab      Arena Segment
+                 (cells)    (blocks)
+                   │        │
   Unmanaged memory:  raw bytes of the string (UTF-16 chars)
 ```
 
