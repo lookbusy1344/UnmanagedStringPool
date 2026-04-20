@@ -192,15 +192,10 @@ The caller gets back a `PooledStringRef` — a 16-byte value type containing
 `(pool reference, slotIndex, generation)`. This is the **only** thing the
 caller ever holds. They never see raw pointers, tiers, slabs, or segments.
 
-When the caller later reads the string (via `ref.AsSpan()`), the path is:
-
-```
-ref.AsSpan()
-  → pool.ReadSlot(slotIndex, generation)
-    → slots.TryReadSlot(slotIndex, generation) → SegmentedSlotEntry { Ptr, LengthChars }
-    → untag Ptr (mask off bit 0) → raw pointer
-    → new ReadOnlySpan<char>(rawPtr, lengthChars)
-```
+When the caller later reads the string (via `ref.AsSpan()`), the slot
+table resolves the handle to a raw pointer — see
+["How a PooledStringRef resolves to a string"](#how-a-pooledstringref-resolves-to-a-string)
+in the Orientation section for the full trace.
 
 ### 1.3 How disposal flows through the graph
 
@@ -248,7 +243,7 @@ Bitmap (managed ulong[] on the GC heap):
 Convention: 1 = free, 0 = used
 ```
 
-Each cell is a fixed-size slot. A string shorter than the cell size simply
+Each cell is a fixed-size region. A string shorter than the cell size simply
 doesn't use the trailing bytes — the actual length is stored in the slot
 table, not in the slab. A 3-char string in a 16-char cell occupies 6 of
 the 32 bytes; the remaining 26 bytes are wasted but the trade-off is O(1)
@@ -299,7 +294,14 @@ regardless of chain state. It exists so `LocateSlabByPointer` can find the
 owning slab when freeing a raw pointer — full slabs are off their chain but
 must still be locatable.
 
-### 2.4 Slab lifetime
+### 2.4 Pre-warming with Reserve
+
+`pool.Reserve(chars)` splits the budget between tiers and pre-allocates
+capacity. The slab tier's share triggers `AllocateNewSlab` calls for the
+largest size class (128-char cells) until enough total capacity exists.
+This avoids the first-allocation latency of creating slabs on demand.
+
+### 2.5 Slab lifetime
 
 Slabs are **never freed** during normal operation. Once allocated, a slab
 persists until either:
@@ -307,7 +309,7 @@ persists until either:
 - `pool.Dispose()` — frees all slab buffers via `Marshal.FreeHGlobal`
 - `pool.Clear()` — resets all bitmaps to "all free" and re-threads every
   slab into its chain, but does **not** free the unmanaged memory. The
-  slabs are reused for future allocations.
+  slabs are reused for future allocations. See §6.14 for a walkthrough.
 
 ---
 
@@ -404,13 +406,30 @@ segments: List<SegmentedArenaSegment>
 New segments are sized as `max(defaultSegmentBytes, requestedByteCount)`.
 A single 2 MB string will create a 2 MB segment dedicated to it.
 
-### 3.5 Segment lifetime
+### 3.5 Pre-warming with Reserve
+
+The arena tier's share of `pool.Reserve(chars)` triggers new segment
+allocations until total segment capacity meets the byte budget. Each new
+segment uses the default size (1 MB) or whatever is needed to reach the
+target.
+
+### 3.6 Segment lifetime
 
 Like slabs, segments are **never freed** during normal operation:
 
 - `pool.Dispose()` — frees all segment buffers via `Marshal.FreeHGlobal`
 - `pool.Clear()` — resets every segment's `BumpOffset` to 0 and clears all
   bin heads, but keeps the unmanaged memory. The segments are reused.
+  See §6.14 for a walkthrough.
+
+### 3.7 Dead field: `SegmentedArenaSegment.Next`
+
+The segment class declares a `Next` property (`SegmentedArenaSegment?
+Next`), but it is never read or written by any production code path. The
+arena tier uses a flat `List<SegmentedArenaSegment>` rather than a linked
+list of segments, so this field is dead code — likely a leftover from an
+earlier design that threaded segments into a chain. It has no effect on
+behaviour.
 
 ---
 
@@ -1367,6 +1386,198 @@ pool.Allocate(shortDoc)   // 200 chars = 400 bytes
 
 The 10,000 B free block was split: 400 B taken for the new string, 9,600 B
 remainder re-linked as a new (smaller) free block in the same bin.
+
+### 6.12 Allocating into a reused slot (free chain pop)
+
+**State before:** Slots 0 and 2 have been freed. The slot free chain is
+`freeHead → 2 → 0 → NoFreeSlot`. `highWater = 4`. Slot 1 and 3 are live.
+
+```
+pool.Allocate("reuse")   // 5 chars → slab tier, class 0
+ │
+ │  (slab tier allocation proceeds as normal — omitted for brevity)
+ │
+ │  Allocate a slot
+ ├─ slots.Allocate(taggedPtr, lengthChars=5)
+ │   │
+ │   │  freeHead ≠ NoFreeSlot → reuse a freed slot instead of bumping highWater
+ │   │
+ │   ├─ slotIndex = freeHead = 2
+ │   ├─ freeHead = (uint)slots[2].Ptr = 0   ← pop: follow the chain link
+ │   │
+ │   │      Slot free chain BEFORE:
+ │   │      freeHead ──→ slot[2] ──→ slot[0] ──→ 0xFFFFFFFF (end)
+ │   │
+ │   │      Slot free chain AFTER:
+ │   │      freeHead ──→ slot[0] ──→ 0xFFFFFFFF (end)
+ │   │      (slot 2 is no longer on the chain — it's live now)
+ │   │
+ │   ├─ generation = ClearFreeAndBumpGen(0x80000002) = 0x00000003
+ │   │   (free flag cleared, counter bumped from 2 → 3)
+ │   │
+ │   ├─ slot[2] = { Ptr=taggedPtr, LengthChars=5, Generation=0x00000003 }
+ │   └─ activeCount: 2 → 3
+ │
+ │      Slot table after:
+ │      [0] Gen=0x80000002 (freed, on chain)
+ │      [1] Gen=0x00000001 (live)
+ │      [2] Gen=0x00000003 (live — just reused!)
+ │      [3] Gen=0x00000001 (live)
+ │      freeHead = 0,  highWater = 4 (unchanged — no new slots consumed)
+ │
+ └─ return PooledStringRef(pool, slotIndex=2, generation=3)
+```
+
+The slot was reused without growing the slot table. Any old
+`PooledStringRef` that still holds `slotIndex=2, generation=1` (the
+original allocation) will fail the generation check — `0x00000003 ≠ 1`.
+
+### 6.13 Slot table growth (doubling)
+
+**State before:** Slot table has `Capacity = 64`, `highWater = 64` (every
+slot has been touched at least once), `freeHead = NoFreeSlot` (no freed
+slots available). All 64 slots are live.
+
+```
+pool.Allocate("grow")   // triggers slot table growth
+ │
+ │  (tier allocation proceeds as normal — omitted)
+ │
+ │  Allocate a slot
+ ├─ slots.Allocate(taggedPtr, lengthChars=4)
+ │   │
+ │   ├─ freeHead = NoFreeSlot → no reusable slots
+ │   ├─ highWater(64) == Capacity(64) → must grow!
+ │   │   │
+ │   │   └─ Grow()
+ │   │       ├─ newCapacity = 64 × 2 = 128
+ │   │       └─ Array.Resize(ref slots, 128)
+ │   │           Allocates a new SegmentedSlotEntry[128] on the managed heap,
+ │   │           copies all 64 existing entries, slots[64…127] are zeroed.
+ │   │           Old array becomes eligible for GC.
+ │   │
+ │   │           This is the ONLY managed allocation that occurs during
+ │   │           steady-state pool usage. It happens at powers of 2:
+ │   │           64 → 128 → 256 → 512 → …
+ │   │
+ │   ├─ slotIndex = 64,  highWater: 64 → 65
+ │   ├─ generation = ClearFreeAndBumpGen(0x00000000) = 0x00000001
+ │   └─ Capacity is now 128 — next 63 allocations won't trigger growth
+ │
+ └─ return PooledStringRef(pool, slotIndex=64, generation=1)
+```
+
+Growth is O(n) in current slot count due to the array copy, but it
+happens only at doubling boundaries — amortised O(1) per allocation.
+The raw unmanaged pointers stored in slots remain valid because
+neither tier ever moves allocated memory.
+
+### 6.14 pool.Clear() — reset without freeing memory
+
+**State before:** Pool has been in use. 3 slabs exist (SlabA in class 0,
+SlabB in class 1, SlabC in class 0 — SlabC is full and off its chain).
+2 segments exist. 50 slots are live, 10 are on the free chain.
+`highWater = 60`.
+
+```
+pool.Clear()
+ │
+ │  ── STEP 1: Clear all slots ──
+ │
+ ├─ slots.ClearAllSlots()
+ │   │
+ │   │  Walk slots[0…59] (everything below highWater):
+ │   ├─ for each slot:
+ │   │   ├─ if live → MarkFreeAndBumpGen (set free flag, bump counter)
+ │   │   ├─ if already freed → leave generation as-is
+ │   │   ├─ slot.Ptr = next index (i+1), or NoFreeSlot for the last one
+ │   │   └─ slot.LengthChars = 0
+ │   │
+ │   │  Rebuild the free chain in index order:
+ │   ├─ freeHead = 0
+ │   ├─ slot[0].Ptr → 1 → slot[1].Ptr → 2 → … → slot[59].Ptr → 0xFFFFFFFF
+ │   └─ activeCount = 0
+ │
+ │      Slot free chain after:
+ │      freeHead ──→ 0 ──→ 1 ──→ 2 ──→ … ──→ 59 ──→ 0xFFFFFFFF
+ │      highWater = 60 (unchanged — doesn't shrink)
+ │      Every slot has its free flag set. All old PooledStringRefs are now
+ │      stale — their generation will mismatch on any read attempt.
+ │
+ │  ── STEP 2: Reset slab tier ──
+ │
+ ├─ slabTier.ResetAll()
+ │   │
+ │   │  Phase 1: Disconnect all chains and reset bitmaps
+ │   ├─ activeSlabs[0…4] = null              ← all chain heads cleared
+ │   ├─ for each slab in allSlabs:
+ │   │   ├─ slab.ResetAllCellsFree()
+ │   │   │   ├─ bitmap words all set to ulong.MaxValue  (every cell free)
+ │   │   │   ├─ excess bits past CellCount cleared
+ │   │   │   └─ freeCells = CellCount
+ │   │   └─ slab.NextInClass = null          ← unlink from any chain
+ │   │
+ │   │  Phase 2: Re-thread every slab into its size-class chain
+ │   └─ for each slab in allSlabs:
+ │       └─ LinkAtHead(SizeClassForCellBytes(slab.CellBytes), slab)
+ │
+ │          Slab chains BEFORE:
+ │          activeSlabs[0] ──→ SlabA ──→ null       (SlabC was full, off chain)
+ │          activeSlabs[1] ──→ SlabB ──→ null
+ │
+ │          Slab chains AFTER:
+ │          activeSlabs[0] ──→ SlabC ──→ SlabA ──→ null   (SlabC is back!)
+ │          activeSlabs[1] ──→ SlabB ──→ null
+ │
+ │          Note: allSlabs order is [SlabA, SlabB, SlabC] (insertion order).
+ │          Phase 2 iterates this order, calling LinkAtHead each time.
+ │          LinkAtHead prepends, so the last slab processed for a class
+ │          ends up at the chain head. SlabC (processed after SlabA for
+ │          class 0) becomes the new head.
+ │
+ │          All 3 slabs have full bitmaps (every cell free).
+ │          Unmanaged memory is NOT freed — buffers are reused.
+ │
+ │  ── STEP 3: Reset arena tier ──
+ │
+ └─ arenaTier.ResetAll()
+     │
+     └─ for each segment in segments:
+         └─ segment.Reset()
+             ├─ BumpOffset = 0               ← as if nothing was ever allocated
+             └─ binHeads[0…15] = -1          ← free lists discarded
+ 
+             Segment layout BEFORE:
+             ┌────────────────┬──────────┬──────────────────────────┐
+             │ live blocks    │ free blk │ (unused)       ← Bump   │
+             └────────────────┴──────────┴──────────────────────────┘
+ 
+             Segment layout AFTER:
+             ┌──────────────────────────────────────────────────────┐
+             │ (entire buffer available)                  ← Bump=0 │
+             └──────────────────────────────────────────────────────┘
+ 
+             The old string data is still physically in the buffer but
+             will be overwritten by future bump allocations. No free-list
+             entries exist because BumpOffset = 0 means the bump allocator
+             covers the full capacity.
+ 
+             Unmanaged memory is NOT freed — segments are reused.
+```
+
+**Clear vs Dispose:**
+
+| | `Clear()` | `Dispose()` |
+|-|-----------|-------------|
+| Slots | All marked freed, chain rebuilt | All marked freed, chain rebuilt |
+| Slab bitmaps | Reset to all-free | Not explicitly reset |
+| Slab memory | **Kept** — buffers reused | **Freed** via `Marshal.FreeHGlobal` |
+| Arena bumps/bins | Reset to zero | Not explicitly reset |
+| Arena memory | **Kept** — buffers reused | **Freed** via `Marshal.FreeHGlobal` |
+| Pool usable after? | Yes | No — `disposed = true` |
+
+`Clear()` is for "throw away all strings but keep the pool warm for the
+next batch." `Dispose()` is for "we're done, return everything to the OS."
 
 ---
 
