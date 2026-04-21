@@ -15,9 +15,12 @@ internal sealed class SegmentedSlabTier : IDisposable
 {
 	private static readonly int[] SizeClassChars = [8, 16, 32, 64, 128];
 
+	[InlineArray(SegmentedConstants.SlabSizeClassCount)]
+	private struct ActiveSlabArray { private SegmentedSlab? _e; }
+
 	// Chain invariant: every slab in activeSlabs[] has at least one free cell.
 	// Full slabs are detached from their chain on the cycle they fill; freeing a cell in a full slab re-links it.
-	private readonly SegmentedSlab?[] activeSlabs = new SegmentedSlab?[SegmentedConstants.SlabSizeClassCount];
+	private ActiveSlabArray activeSlabs;
 
 	// Tracks every slab regardless of chain state so LocateSlabByPointer can find full (off-chain) slabs during Free.
 	private readonly List<SegmentedSlab> allSlabs = [];
@@ -123,7 +126,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 	/// </summary>
 	public void ResetAll()
 	{
-		for (var i = 0; i < activeSlabs.Length; i++) {
+		for (var i = 0; i < SegmentedConstants.SlabSizeClassCount; i++) {
 			activeSlabs[i] = null;
 		}
 
@@ -159,7 +162,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 		}
 
 		allSlabs.Clear();
-		for (var i = 0; i < activeSlabs.Length; i++) {
+		for (var i = 0; i < SegmentedConstants.SlabSizeClassCount; i++) {
 			activeSlabs[i] = null;
 		}
 	}
