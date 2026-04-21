@@ -18,6 +18,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 	// Chain invariant: every slab in activeSlabs[] has at least one free cell.
 	// Full slabs are detached from their chain on the cycle they fill; freeing a cell in a full slab re-links it.
 	private readonly SegmentedSlab?[] activeSlabs = new SegmentedSlab?[SegmentedConstants.SlabSizeClassCount];
+
 	// Tracks every slab regardless of chain state so LocateSlabByPointer can find full (off-chain) slabs during Free.
 	private readonly List<SegmentedSlab> allSlabs = [];
 	private readonly int cellsPerSlab;
@@ -27,6 +28,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 		if (cellsPerSlab < 1) {
 			throw new ArgumentOutOfRangeException(nameof(cellsPerSlab));
 		}
+
 		this.cellsPerSlab = cellsPerSlab;
 	}
 
@@ -40,6 +42,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 			foreach (var s in allSlabs) {
 				total += s.UnmanagedBytes;
 			}
+
 			return total;
 		}
 	}
@@ -49,15 +52,15 @@ internal sealed class SegmentedSlabTier : IDisposable
 	/// or -1 if the count exceeds the slab tier threshold (caller must route to the arena tier).
 	/// </summary>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public static int ChooseSizeClass(int charCount)
-	{
-		if (charCount <= 8) { return 0; }
-		if (charCount <= 16) { return 1; }
-		if (charCount <= 32) { return 2; }
-		if (charCount <= 64) { return 3; }
-		if (charCount <= 128) { return 4; }
-		return -1;
-	}
+	public static int ChooseSizeClass(int charCount) =>
+		charCount switch {
+			<= 8 => 0,
+			<= 16 => 1,
+			<= 32 => 2,
+			<= 64 => 3,
+			<= 128 => 4,
+			_ => -1
+		};
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static int CellBytesForSizeClass(int sizeClass) => SizeClassChars[sizeClass] * sizeof(char);
@@ -72,17 +75,20 @@ internal sealed class SegmentedSlabTier : IDisposable
 		if (sizeClass < 0) {
 			throw new InvalidOperationException("Size exceeds slab threshold; caller should route to arena");
 		}
+
 		var slab = activeSlabs[sizeClass] ?? AllocateNewSlab(sizeClass);
 		if (!slab.TryAllocateCell(out var cellIndex)) {
 			// Chain-head invariant violated; recover by allocating a fresh slab.
 			slab = AllocateNewSlab(sizeClass);
 			_ = slab.TryAllocateCell(out cellIndex);
 		}
+
 		if (slab.IsFull) {
 			DetachHead(sizeClass); // remove from chain; still tracked in allSlabs for pointer lookup
 		}
+
 		owningSlab = slab;
-		return new IntPtr(slab.Buffer.ToInt64() + slab.OffsetOfCell(cellIndex));
+		return new(slab.Buffer.ToInt64() + slab.OffsetOfCell(cellIndex));
 	}
 
 	/// <summary>
@@ -106,6 +112,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 				return s;
 			}
 		}
+
 		throw new InvalidOperationException("Pointer does not belong to any slab in this tier");
 	}
 
@@ -119,10 +126,12 @@ internal sealed class SegmentedSlabTier : IDisposable
 		for (var i = 0; i < activeSlabs.Length; i++) {
 			activeSlabs[i] = null;
 		}
+
 		foreach (var s in allSlabs) {
 			s.ResetAllCellsFree();
 			s.NextInClass = null;
 		}
+
 		// Re-thread every slab into its size-class chain in allSlabs insertion order.
 		// LinkAtHead prepends, so the last slab processed for a class ends up as the chain head.
 		foreach (var s in allSlabs) {
@@ -148,6 +157,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 		foreach (var s in allSlabs) {
 			s.Dispose();
 		}
+
 		allSlabs.Clear();
 		for (var i = 0; i < activeSlabs.Length; i++) {
 			activeSlabs[i] = null;
@@ -174,6 +184,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 	{
 		var head = activeSlabs[sizeClass];
 		if (head is null) { return; }
+
 		activeSlabs[sizeClass] = head.NextInClass;
 		head.NextInClass = null;
 	}
@@ -184,6 +195,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 		for (var i = 0; i < SizeClassChars.Length; i++) {
 			if (CellBytesForSizeClass(i) == cellBytes) { return i; }
 		}
+
 		throw new InvalidOperationException("Unknown cell size");
 	}
 }
