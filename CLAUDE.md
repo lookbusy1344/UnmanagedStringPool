@@ -15,16 +15,7 @@ Tests must be run with `gtimeout`.
 
 ## Code Quality
 
-Always run `dotnet format` after code changes. Use `/pre-commit` for the full pre-commit procedure (format + analyzer check + tests).
-
-```bash
-dotnet format
-dotnet build /p:EnforceCodeStyleInBuild=true
-```
-
-## Committing
-
-Before every commit, run the `pre-commit` skill.
+**IMPORTANT:** Always run the `pre-commit` skill before every commit — do not skip it. It runs format, analyzer check, and tests in sequence and must fully pass before committing.
 
 ## Architecture
 
