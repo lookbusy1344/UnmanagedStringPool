@@ -2,20 +2,30 @@
 
 [![Build and test](https://github.com/lookbusy1344/UnmanagedStringPool/actions/workflows/ci.yml/badge.svg)](https://github.com/lookbusy1344/UnmanagedStringPool/actions/workflows/ci.yml)
 
-A high-performance .NET library for managing strings in unmanaged memory to reduce garbage collection pressure in string-intensive applications.
+A high-performance .NET 10 library for storing strings in unmanaged memory to eliminate GC pressure in string-intensive workloads.
 
 ## Overview
 
-`UnmanagedStringPool` allocates a single contiguous block of unmanaged memory and provides string storage as lightweight `PooledString` structs. This approach eliminates per-string heap allocations and significantly reduces GC overhead in scenarios with high string throughput or large string datasets.
+Two implementations are provided:
+
+- **`SegmentedStringPool`** — the current implementation. A two-tier allocator (slab + arena) that produces zero managed allocation per string operation in steady state. Handles are 16-byte `PooledStringRef` structs.
+- **`UnmanagedStringPool`** — the legacy implementation. A single contiguous block with a managed dictionary for metadata. Still the fastest option for bulk large-string workloads, but generates more GC pressure under churn. Handles are 12-byte `PooledString` structs.
+
+See [Which should I use?](#which-should-i-use) for a benchmark-backed decision guide.
 
 ## Key Features
 
-- **Zero GC Pressure**: Strings stored entirely in unmanaged memory
-- **Value Type Semantics**: `PooledString` is a 12-byte struct with full copy semantics
-- **Automatic Memory Management**: Built-in defragmentation, growth, and coalescing
-- **Thread-Safe Reads**: Multiple threads can read strings concurrently
-- **Memory Efficient**: 8-byte alignment, free block coalescing, size-indexed allocation
-- **Safe Design**: Allocation IDs prevent use-after-free bugs
+**Both pools:**
+- Strings stored entirely in unmanaged memory — no per-string heap allocation
+- Value-type handles with full copy semantics; no heap allocation for references
+- Thread-safe reads; writes require external synchronisation
+- Generation counters on handles prevent use-after-free
+
+**Segmented pool additionally:**
+- Zero managed allocation per `Allocate`/`Free` in steady state
+- Slab tier: O(1) alloc/free for strings ≤128 chars via bitmap + `BitOperations.TrailingZeroCount`
+- Arena tier: bump-allocated segments; free-block headers live inside freed unmanaged memory
+- No in-place defragmentation — segments grow by appending, never by copying
 
 ## Design
 
@@ -27,32 +37,7 @@ Traditional .NET strings are immutable objects on the managed heap. In high-thro
 - Large strings promote to Gen 2, causing expensive full GCs
 - Memory fragmentation from many small string objects
 
-### Rationale
-
-- **Finalizers** are needed to ensure unmanaged memory cleanup, but structs don't support them. We need a class.
-- A class-per-string would create significant GC load (even if the strings were stored in unmanaged memory), so instead the
-  finalizable class represents a 'pool', which can hold several strings and performs just one unmanaged memory allocation.
-- Instances of individual pooled strings are **structs**, pointing into a pool object. They have full **copy semantics** and don't involve any
-  heap allocation.
-
-- The pool implements **IDisposable**, with a finalizer, for memory safety.
-- Invalid pointers are never dereferenced. If the pool is disposed, any string structs relying on it automatically become invalid.
-- The pool is deterministically freed, but the tiny pool object itself gets GC's normally (about 100 bytes)
-- If the string within the pool is freed, the `allocation_id` is not reused so any string structs pointing to it become invalid. Reusing
-  the memory in the pool will result in a different id, preventing old string structs pointing to the new string.
-- Freed space in the pool is reused where possible, and periodically compacted
-
-### Architecture details
-
-1. **Single Memory Block**: One large allocation instead of thousands of small ones reduces OS memory management overhead
-
-2. **Struct-Based References**: `PooledString` structs (12 bytes) are stack-allocated or embedded in other structs, eliminating heap allocations for references
-
-3. **Allocation IDs**: Each allocation gets a unique, never-reused ID. This prevents dangling references - if a string is freed and reallocated, old `PooledString` instances become safely invalid
-
-4. **Automatic Defragmentation**: At 35% fragmentation threshold, the pool automatically compacts memory, updating all internal references transparently
-
-5. **Size-Indexed Free Lists**: Free blocks are tracked by size buckets for O(1) best-fit allocation
+The pool approach makes one (or a few) large unmanaged allocations and hands out references into them — one finalizable class object per pool, not per string.
 
 ### Segmented pool architecture
 
@@ -79,67 +64,79 @@ Not recommended for:
 - Long-lived strings that rarely change
 - Scenarios requiring string interning
 - Applications with low string allocation rates
+- Any consumption point that calls `.ToString()` — converting a pooled string to a managed `string` allocates on the heap and erases most of the GC benefit. Favour `ReadOnlySpan<char>` via `.AsSpan()` throughout the hot path.
 
 ## Basic Usage
+
+### SegmentedStringPool (recommended)
+
+```csharp
+using var pool = new SegmentedStringPool();
+
+PooledStringRef str1 = pool.Allocate("Hello, World!");
+PooledStringRef str2 = pool.Allocate("Segmented strings!");
+
+// Always use AsSpan() — calling ToString() allocates a managed string and loses the GC benefit
+Console.Out.WriteLine(str1.AsSpan());
+int length = str2.Length;
+char firstChar = str2[0];
+
+str1.Dispose(); // returns memory to the slab/arena for reuse
+```
+
+> **Important:** keep `ReadOnlySpan<char>` throughout the hot path. The moment you call `.ToString()` you allocate a managed string and discard most of the benefit. Any API that accepts `ReadOnlySpan<char>` (e.g. `Console.Out.WriteLine`, `MemoryExtensions` helpers, parsers) avoids this.
+
+### UnmanagedStringPool (legacy)
 
 ```csharp
 // Create a pool with 1MB initial size
 using var pool = new UnmanagedStringPool(1024 * 1024);
 
-// Allocate strings
 PooledString str1 = pool.AllocateString("Hello, World!");
-PooledString str2 = pool.AllocateString("Unmanaged strings!");
 
-// Create empty strings (optimized - no memory allocation)
-PooledString empty = pool.CreateEmptyString();
+Console.Out.WriteLine(str1.AsSpan());
 
-// Use spans directly to avoid heap allocations
-Console.Out.WriteLine(str1.AsSpan());  // Console.Out.WriteLine accepts ReadOnlySpan<char>
-int length = str2.Length;
-char firstChar = str2[0];
-
-// Strings can be explicitly freed
 str1.Dispose();
-
-// Pool automatically cleans up remaining allocations on disposal
 ```
-
-### Empty String Behavior
-
-Empty strings receive special optimization:
-- Use reserved allocation ID (0) with no actual memory allocation
-- Remain valid for read operations even after other strings are freed
-- **Important**: Become invalid after pool disposal since operations like `Insert()` require the pool to allocate memory for the resulting non-empty string
-- All empty strings from any pool are considered equal
 
 ## Test Suite
 
-The project includes comprehensive test coverage across multiple areas:
+**Segmented pool:**
+- `SegmentedStringPoolTests.cs` — core API and allocation behaviour
+- `SegmentedStringPoolLifecycleTests.cs` — disposal and invalidation
+- `SegmentedSlabTests.cs` / `SegmentedSlabTierTests.cs` — slab tier and size-class routing
+- `SegmentedArenaSegmentTests.cs` / `SegmentedArenaTierTests.cs` — arena bump/free-list logic
+- `SegmentedSlotTableTests.cs` — slot table growth and generation tracking
+- `PooledStringRefTests.cs` — handle semantics and copy behaviour
+- `GcPressureTests.cs` — verifies zero managed allocation in steady state
 
-- **UnmanagedStringPoolTests.cs**: Core functionality and basic operations
-- **UnmanagedStringPoolEdgeCaseTests.cs**: Edge cases and error conditions
-- **FragmentationAndMemoryTests.cs**: Memory management and defragmentation
-- **FragmentationTest.cs**: Specific fragmentation scenarios
-- **PooledStringTests.cs**: String operations and manipulations
-- **ConcurrentAccessTests.cs**: Thread safety and concurrent operations
-- **DisposalAndLifecycleTests.cs**: Object disposal and lifecycle management
-- **FinalizerBehaviorTests.cs**: Finalizer and GC interaction tests
-- **ClearMethodTests.cs**: Pool clearing operations
-- **IntegerOverflowTests.cs**: Overflow protection and boundary conditions
+**Legacy pool:**
+- `UnmanagedStringPoolTests.cs` / `UnmanagedStringPoolEdgeCaseTests.cs` — core and edge cases
+- `FragmentationAndMemoryTests.cs` / `FragmentationTest.cs` — defrag and coalescing
+- `PooledStringTests.cs` — string operations on `PooledString`
+- `ConcurrentAccessTests.cs` — thread-safety under concurrent reads
+- `DisposalAndLifecycleTests.cs` / `FinalizerBehaviorTests.cs` — lifecycle and finalizer
+- `ClearMethodTests.cs` / `IntegerOverflowTests.cs` — reset and overflow guards
+- `CopyBehaviorTests.cs` — struct copy semantics
 
 ## Performance Characteristics
 
-- **Allocation**: O(1) average case with size-indexed free lists
-- **Deallocation**: O(1) with immediate coalescing
-- **Defragmentation**: O(n) where n is active allocations, triggered automatically
-- **Memory Overhead**: ~8 bytes per allocation for alignment and metadata
-- **Growth**: Configurable growth factor (default 2x) when pool exhausted
+**SegmentedStringPool:**
+- Allocation (slab tier, ≤128 chars): O(1) — bitmap scan via `TrailingZeroCount`
+- Allocation (arena tier, >128 chars): O(1) amortised — free-list bin lookup then bump fallback
+- Deallocation: O(1) with immediate coalescing in arena tier
+- No defragmentation pass — segments grow by appending; freed slab cells recycle in place
+- Managed allocation per operation: zero in steady state
+
+**UnmanagedStringPool (legacy):**
+- Allocation: O(1) average with size-indexed free lists
+- Deallocation: O(1) with immediate coalescing
+- Defragmentation: O(n) triggered automatically at 35% fragmentation threshold
+- Memory overhead: ~8 bytes per allocation for alignment and metadata
 
 ## Thread Safety
 
-- **Read Operations**: Fully thread-safe
-- **Write Operations**: Require external synchronization
-- **Disposal**: Not thread-safe, ensure exclusive access
+Both pools: reads are fully thread-safe; writes require external synchronisation; disposal is not thread-safe.
 
 ## Building and Testing
 
@@ -195,13 +192,34 @@ dotnet run --configuration Release --project Benchmarks -- --filter "*BulkAlloca
 dotnet run --configuration Release --project Benchmarks -- --filter "*Interleaved*"
 ```
 
+## Why Segmented is generally superior
+
+The legacy pool's fundamental problem is metadata cost. Every allocated string requires an entry in a managed `Dictionary<uint, ...>` — one object on the managed heap per live string. Under continuous churn (strings allocated and freed throughout an operation), those dictionary entries generate steady Gen0 pressure regardless of where the string data lives. At N=10,000 interleaved, the benchmarks record ~640 Gen0 collections per iteration even though all string bytes are in unmanaged memory.
+
+`SegmentedStringPool` eliminates this by moving all per-string metadata into unmanaged memory or into a plain `SlotEntry[]` array that never grows under normal churn (slots are recycled via an intrusive free list). The result is zero managed allocation per `Allocate`/`Free` in steady state.
+
+The architectural differences that make this possible:
+
+| | Legacy | Segmented |
+|---|---|---|
+| String data | Single contiguous block | Slab cells / arena segments |
+| Per-string metadata | Managed `Dictionary` entry | Slot in `SlotEntry[]` (recycled) |
+| Free-list headers | Managed objects | Embedded in freed unmanaged memory |
+| Small string strategy | Same allocator as large strings | Dedicated bitmap slabs per size class |
+| Defragmentation | O(n) compaction pass at 35% threshold | Not needed — slabs recycle in place |
+| Handle size | 12 bytes (`PooledString`) | 16 bytes (`PooledStringRef`) |
+
+**Where the legacy pool still wins:** bulk allocate-then-free of large strings (≥256 chars) where the working set is stable, not churning. The contiguous block layout gives slightly better cache locality for sequential reads, and the dictionary overhead is amortised when strings live long enough. At N=10,000 bulk, legacy is ~19% faster than managed; segmented is ~20% slower but produces 97% less managed allocation.
+
+**The general recommendation:** use `SegmentedStringPool` unless benchmarks on your specific workload show legacy is faster. The Segmented worst case (1.4–1.6× slower than managed) is far less damaging than the Legacy worst case (small-string churn: 6.7× slower, 2.2× more managed allocation than baseline).
+
 ## Which should I use?
 
 ### Use plain managed strings when:
 
 - Strings are short (≤ ~32 chars) and you are not dominated by GC pauses. Managed is 2–4× faster than either pool at 8 chars, with no added complexity.
 - Allocation rate is low. Pool overhead only pays off under sustained high-throughput pressure.
-- You need string interning, `Dictionary` keys, or any API that expects a real `string`. Both pools require converting back to a managed string at consumption points, erasing the savings.
+- You need string interning, `Dictionary` keys, or any API that only accepts a `string`. Calling `.ToString()` on a pooled string allocates a managed string on the heap — if your consumption points can't accept `ReadOnlySpan<char>`, the pool savings are largely erased.
 
 ### Use the Legacy pool (`UnmanagedStringPool`) when:
 

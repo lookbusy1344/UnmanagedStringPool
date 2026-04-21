@@ -1,8 +1,6 @@
-# CLAUDE.md
+# Project Overview
 
-## Project Overview
-
-.NET 10.0 unmanaged string pool reducing GC load. `UnmanagedStringPool` allocates a contiguous block of unmanaged memory; strings are `PooledString` structs pointing into it.
+.NET 10.0 unmanaged string pool reducing GC pressure. The primary implementation is `SegmentedStringPool`; `UnmanagedStringPool` is the older single-block implementation, retained for reference.
 
 ## Build and Test
 
@@ -30,18 +28,33 @@ Before every commit, run the `pre-commit` skill.
 
 ## Architecture
 
-### UnmanagedStringPool
+### SegmentedStringPool (primary)
+
+Two-tier allocator: small strings go to the slab tier; larger strings go to the arena tier.
+
+**Slab tier** (`SegmentedSlabTier`, `SegmentedSlab`)
+- Five size classes: 8, 16, 32, 64, 128 chars
+- Each class is an intrusive singly-linked chain of fixed-cell slabs backed by unmanaged memory
+- Bitmap tracking (1 = free); `BitOperations.TrailingZeroCount` gives O(1) allocation
+- Full slabs are unlinked from the active chain; freeing a cell re-links if previously full
+
+**Arena tier** (`SegmentedArenaTier`, `SegmentedArenaSegment`)
+- Bump allocator from the tail + segregated free-list bins (keyed by Log2(blockSize)) from the head
+- Free blocks embed a `SegmentedFreeBlockHeader` inline in the freed memory
+- Oversized allocations get a dedicated segment; existing segments are never resized or moved
+
+**Slot table** (`SegmentedSlotTable`, `SegmentedSlotEntry`)
+- Dynamically-growing array; doubles on growth
+- Intrusive free-list via generation high bit + Ptr field; generation increments on reuse to detect dangling refs
+
+**Handle** (`PooledStringRef`)
+- 16-byte readonly struct; no heap allocation
+- Validated via slot generation; invalidated on disposal or explicit free
+
+### UnmanagedStringPool (legacy)
 - Single contiguous unmanaged memory block; thread-safe reads, external sync for mutations
 - Auto-grows with configurable factor; finalizer cleans up unmanaged memory
-
-### PooledString
-- 12-byte struct (pool reference + allocation ID); full copy semantics, no heap allocation
-- Allocation ID 0 reserved for empty strings; IDs never reused (prevents dangling refs)
-- Invalidated on pool disposal or explicit free
-
-### Memory Model
-- 8-byte aligned; free block coalescing; size-indexed free list
-- Defrag triggers at 35% fragmentation threshold
+- `PooledString`: 12-byte struct (pool reference + allocation ID); allocation ID 0 reserved for empty strings
 
 ## Code Style
 
