@@ -727,7 +727,7 @@ public void Free(IntPtr ptr, SegmentedSlab slab) {
     var wasFull = slab.IsFull;
     slab.FreeCell(slab.CellIndexFromOffset(offset));
     if (wasFull) {
-        LinkAtHead(SizeClassForCellBytes(slab.CellBytes), slab);
+        LinkAtHead(slab.SizeClass, slab);
     }
 }
 ```
@@ -847,7 +847,7 @@ pool.Allocate("Hi")
  ├─ activeSlabs[0] is null  →  no slab exists yet for this class
  │   │
  │   └─ AllocateNewSlab(0)
- │       ├─ new SegmentedSlab(cellBytes=16, cellCount=256)
+ │       ├─ new SegmentedSlab(sizeClass=0, cellBytes=16, cellCount=256)
  │       ├─ Marshal.AllocHGlobal(16 × 256 = 4,096 bytes)
  │       ├─ bitmap: 4 × ulong, all bits = 1 (every cell free)
  │       ├─ allSlabs.Add(slab)                ← tracked in flat list
@@ -911,7 +911,7 @@ pool.Allocate("Hello World!")
  ├─ activeSlabs[1] is null  →  first allocation in this size class
  │   │
  │   └─ AllocateNewSlab(1)
- │       ├─ new SegmentedSlab(cellBytes=32, cellCount=256)
+ │       ├─ new SegmentedSlab(sizeClass=1, cellBytes=32, cellCount=256)
  │       ├─ Marshal.AllocHGlobal(32 × 256 = 8,192 bytes)
  │       ├─ allSlabs.Add(slab)                ← now 2 slabs in flat list
  │       └─ LinkAtHead(1, slab)
@@ -1567,7 +1567,7 @@ pool.Clear()
  │   │
  │   │  Phase 2: Re-thread every slab into its size-class chain
  │   └─ for each slab in allSlabs:
- │       └─ LinkAtHead(SizeClassForCellBytes(slab.CellBytes), slab)
+ │       └─ LinkAtHead(s.SizeClass, s)
  │
  │          Slab chains BEFORE:
  │          activeSlabs[0] ──→ SlabA ──→ null       (SlabC was full, off chain)
