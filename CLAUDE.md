@@ -24,6 +24,10 @@ dotnet format
 dotnet build /p:EnforceCodeStyleInBuild=true
 ```
 
+## Committing
+
+Before every commit, run the `pre-commit` skill.
+
 ## Architecture
 
 ### UnmanagedStringPool
