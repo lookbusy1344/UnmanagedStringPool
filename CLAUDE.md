@@ -1,106 +1,45 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## AI Assistant Guidelines
-
-See `.github/copilot-instructions.md` for general AI assistant guidelines. Key points for Claude Code:
-- Target responses at senior engineer level (15+ years experience)
-- Keep responses concise with minimal code sections
-- Use modern coding styles and functional programming idioms
-- Avoid unnecessary apologies or excitement
-- Generate brief, single-sentence commit messages
-
 ## Project Overview
 
-This is a .NET 9.0 test project implementing an unmanaged string pool to reduce GC load. The `UnmanagedStringPool` class allocates a single block of unmanaged memory and provides string allocations as `PooledString` structs that point into the pool.
+.NET 10.0 unmanaged string pool reducing GC load. `UnmanagedStringPool` allocates a contiguous block of unmanaged memory; strings are `PooledString` structs pointing into it.
 
-## Build and Test Commands
+## Build and Test
 
 ```bash
-# Build the project
 dotnet build
-
-# Run all tests
 dotnet test
-
-# Run tests with verbose output
 dotnet test --logger:"console;verbosity=detailed"
-
-# Run a specific test class
-dotnet test --filter "FullyQualifiedName~UnmanagedStringPoolTests"
-
-# Run a specific test method
-dotnet test --filter "FullyQualifiedName~TestClassName.TestMethodName"
+dotnet test --filter "FullyQualifiedName~ClassName.MethodName"
 ```
 
-## Code Analysis and Linting
+Tests must be run with `gtimeout`.
 
-The project has extensive analyzer configurations with strict code quality rules:
+## Code Quality
+
+Always run `dotnet format` after code changes. Use `/pre-commit` for the full pre-commit procedure (format + analyzer check + tests).
 
 ```bash
-# Build with code analysis enforcement
-dotnet build /p:EnforceCodeStyleInBuild=true
-
-# Check for analyzer warnings/errors
-dotnet build --no-incremental
-
-# Format code after making changes
 dotnet format
-
-# Verify code is properly formatted without making changes
-dotnet format --verify-no-changes
+dotnet build /p:EnforceCodeStyleInBuild=true
 ```
 
-**IMPORTANT**: Always run `dotnet format` after making any code changes to ensure consistent formatting.
-
-## Core Architecture
+## Architecture
 
 ### UnmanagedStringPool
-- Manages a single contiguous block of unmanaged memory
-- Implements memory allocation, deallocation, and defragmentation
-- Thread-safe for reads, requires external synchronization for mutations
-- Automatic growth capability with configurable growth factor
-- Finalizer ensures unmanaged memory cleanup
+- Single contiguous unmanaged memory block; thread-safe reads, external sync for mutations
+- Auto-grows with configurable factor; finalizer cleans up unmanaged memory
 
 ### PooledString
-- Value type (struct) representing a string in the pool
-- 12 bytes total: pool reference + allocation ID
-- Full copy semantics, no heap allocation per string
-- Becomes invalid if pool is disposed or string is freed
-- Implements IDisposable for deterministic cleanup
-- Empty strings use reserved allocation ID (0) with no memory allocation
-- Empty strings become invalid after pool disposal since operations like Insert require the pool
+- 12-byte struct (pool reference + allocation ID); full copy semantics, no heap allocation
+- Allocation ID 0 reserved for empty strings; IDs never reused (prevents dangling refs)
+- Invalidated on pool disposal or explicit free
 
-### Memory Management Strategy
-- 8-byte alignment for optimal memory usage
-- Free block coalescing to reduce fragmentation
-- Size-indexed free block tracking for efficient allocation
-- Defragmentation triggered at 35% fragmentation threshold
-- Allocation IDs never reused to prevent dangling references
-
-## Test Structure
-
-- **UnmanagedStringPoolTests.cs**: Core functionality tests
-- **UnmanagedStringPoolEdgeCaseTests.cs**: Edge cases and error conditions
-- **FragmentationAndMemoryTests.cs**: Memory management and fragmentation
-- **FragmentationTest.cs**: Specific fragmentation scenarios
-- **PooledStringTests.cs**: String operations and manipulations
-- **ConcurrentAccessTests.cs**: Thread safety validation
-- **DisposalAndLifecycleTests.cs**: Disposal and lifecycle management
-- **FinalizerBehaviorTests.cs**: Finalizer and GC interaction tests
-- **ClearMethodTests.cs**: Pool clearing operations
-- **IntegerOverflowTests.cs**: Overflow protection and boundary conditions
-- **CopyBehaviorTests.cs**: Copy semantics and behavior validation
+### Memory Model
+- 8-byte aligned; free block coalescing; size-indexed free list
+- Defrag triggers at 35% fragmentation threshold
 
 ## Code Style
 
-The project uses strict .editorconfig settings with:
-- Tabs for indentation
-- Opening braces on same line for control blocks
-- File-scoped namespaces
-- Extensive analyzer rules for design, performance, reliability, and usage
-
-### Naming Conventions
-
-- Test namespace should always be "LookBusy.Test"
+- Test namespace: `LookBusy.Test`
+- Formatting and analyzer rules enforced by `.editorconfig` and the build
