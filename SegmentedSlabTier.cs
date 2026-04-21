@@ -1,3 +1,4 @@
+// ReSharper disable ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
 namespace LookBusy;
 
 using System;

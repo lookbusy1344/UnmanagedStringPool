@@ -46,6 +46,7 @@ internal sealed class SegmentedSlab : IDisposable
 		FreeCells = cellCount;
 	}
 
+	// ReSharper disable once MemberCanBePrivate.Global
 	public int FreeCells { get; private set; }
 
 	public bool IsFull => FreeCells == 0;
@@ -53,7 +54,7 @@ internal sealed class SegmentedSlab : IDisposable
 	public SegmentedSlab? NextInClass { get; set; }
 
 	/// <summary>
-	/// Allocates the first free cell using <see cref="BitOperations.TrailingZeroCount"/> to find the lowest set bit
+	/// Allocates the first free cell using <see cref="BitOperations.TrailingZeroCount(ulong)"/> to find the lowest set bit
 	/// (set = free under the 1=free convention). Returns false if the slab is full.
 	/// </summary>
 	public bool TryAllocateCell(out int cellIndex)

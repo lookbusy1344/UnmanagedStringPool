@@ -76,7 +76,7 @@ internal sealed class SegmentedSlotTable
 
 		var bumped = SegmentedSlotEntry.MarkFreeAndBumpGen(slot.Generation);
 		// Repurpose Ptr to store the next-free-slot index; the real pointer is no longer needed.
-		slot.Ptr = new((long)freeHead);
+		slot.Ptr = new(freeHead);
 		slot.LengthChars = 0;
 		slot.Generation = bumped;
 		freeHead = slotIndex;
@@ -120,7 +120,7 @@ internal sealed class SegmentedSlotTable
 			}
 
 			// Thread the free chain through Ptr in sequential index order.
-			var nextIndex = i + 1 < highWater ? (long)(i + 1) : (long)SegmentedConstants.NoFreeSlot;
+			var nextIndex = i + 1 < highWater ? i + 1 : (long)SegmentedConstants.NoFreeSlot;
 			slot.Ptr = new(nextIndex);
 			slot.LengthChars = 0;
 		}
@@ -136,7 +136,7 @@ internal sealed class SegmentedSlotTable
 	private void Grow()
 	{
 		var newCapacity = slots.Length * 2;
-		if ((uint)newCapacity > (uint)int.MaxValue) {
+		if ((uint)newCapacity > int.MaxValue) {
 			throw new OutOfMemoryException("Slot table capacity exceeded");
 		}
 

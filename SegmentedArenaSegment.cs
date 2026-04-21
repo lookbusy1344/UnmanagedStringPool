@@ -72,7 +72,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 			while (head >= 0) {
 				var hdr = ReadHeader(head);
 				if (hdr.SizeBytes >= size) {
-					UnlinkFromBin(head, ref hdr);
+					UnlinkFromBin(ref hdr);
 					var remainder = hdr.SizeBytes - size;
 					if (remainder >= SegmentedConstants.MinArenaBlockBytes) {
 						// Split the block: the tail portion becomes a new free block in its own bin.
@@ -180,7 +180,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		binHeads[hdr.BinIndex] = offset;
 	}
 
-	private void UnlinkFromBin(int offset, ref SegmentedFreeBlockHeader hdr)
+	private void UnlinkFromBin(ref SegmentedFreeBlockHeader hdr)
 	{
 		if (hdr.PrevOffset >= 0) {
 			var prev = ReadHeader(hdr.PrevOffset);
@@ -214,7 +214,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 			while (cursor >= 0) {
 				var hdr = ReadHeader(cursor);
 				if (cursor == successorOffset) {
-					UnlinkFromBin(cursor, ref hdr);
+					UnlinkFromBin(ref hdr);
 					size += hdr.SizeBytes;
 					return;
 				}
@@ -233,7 +233,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 			while (cursor >= 0) {
 				var hdr = ReadHeader(cursor);
 				if (cursor + hdr.SizeBytes == offset) {
-					UnlinkFromBin(cursor, ref hdr);
+					UnlinkFromBin(ref hdr);
 					offset = cursor;
 					size += hdr.SizeBytes;
 					return;
