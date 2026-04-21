@@ -25,7 +25,10 @@ internal struct SegmentedFreeBlockHeader
 internal sealed class SegmentedArenaSegment : IDisposable
 {
 	[InlineArray(SegmentedConstants.ArenaBinCount)]
-	private struct BinHeadArray { private int _e; }
+	private struct BinHeadArray
+	{
+		private int _e;
+	}
 
 	public readonly IntPtr Buffer;
 	public readonly int Capacity;
@@ -35,9 +38,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 
 	public SegmentedArenaSegment(int capacity)
 	{
-		if (capacity < SegmentedConstants.MinArenaBlockBytes) {
-			throw new ArgumentOutOfRangeException(nameof(capacity));
-		}
+		ArgumentOutOfRangeException.ThrowIfLessThan(capacity, SegmentedConstants.MinArenaBlockBytes);
 		Capacity = capacity;
 		Buffer = Marshal.AllocHGlobal(capacity);
 		for (var i = 0; i < SegmentedConstants.ArenaBinCount; i++) {
@@ -76,26 +77,26 @@ internal sealed class SegmentedArenaSegment : IDisposable
 					if (remainder >= SegmentedConstants.MinArenaBlockBytes) {
 						// Split the block: the tail portion becomes a new free block in its own bin.
 						var tailOffset = head + size;
-						WriteHeader(tailOffset, new SegmentedFreeBlockHeader {
-							SizeBytes = remainder,
-							NextOffset = -1,
-							PrevOffset = -1,
-							BinIndex = BinIndexForSize(remainder),
-						});
+						WriteHeader(tailOffset,
+							new() { SizeBytes = remainder, NextOffset = -1, PrevOffset = -1, BinIndex = BinIndexForSize(remainder) });
 						LinkIntoBin(tailOffset);
 					}
-					ptr = new IntPtr(Buffer.ToInt64() + head);
+
+					ptr = new(Buffer.ToInt64() + head);
 					return true;
 				}
+
 				head = hdr.NextOffset;
 			}
 		}
+
 		// Bump fallback: carve from the never-yet-used tail of the buffer.
 		if (BumpOffset + size <= Capacity) {
-			ptr = new IntPtr(Buffer.ToInt64() + BumpOffset);
+			ptr = new(Buffer.ToInt64() + BumpOffset);
 			BumpOffset += size;
 			return true;
 		}
+
 		ptr = IntPtr.Zero;
 		return false;
 	}
@@ -110,12 +111,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		var size = AlignSize(byteCount);
 		TryCoalesceForward(ref offset, ref size);
 		TryCoalesceBackward(ref offset, ref size);
-		WriteHeader(offset, new SegmentedFreeBlockHeader {
-			SizeBytes = size,
-			NextOffset = -1,
-			PrevOffset = -1,
-			BinIndex = BinIndexForSize(size),
-		});
+		WriteHeader(offset, new() { SizeBytes = size, NextOffset = -1, PrevOffset = -1, BinIndex = BinIndexForSize(size) });
 		LinkIntoBin(offset);
 	}
 
@@ -133,20 +129,19 @@ internal sealed class SegmentedArenaSegment : IDisposable
 
 	public void Dispose()
 	{
-		if (!disposed) {
-			Marshal.FreeHGlobal(Buffer);
-			disposed = true;
+		if (disposed) {
+			return;
 		}
+
+		Marshal.FreeHGlobal(Buffer);
+		disposed = true;
 	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	private static int AlignSize(int size)
 	{
 		const int alignment = SegmentedConstants.PtrAlignment;
-		if (size < SegmentedConstants.MinArenaBlockBytes) {
-			return SegmentedConstants.MinArenaBlockBytes;
-		}
-		return (size + (alignment - 1)) & ~(alignment - 1);
+		return size < SegmentedConstants.MinArenaBlockBytes ? SegmentedConstants.MinArenaBlockBytes : (size + (alignment - 1)) & ~(alignment - 1);
 	}
 
 	// Maps block size to bin index via Log2(size) − 4.
@@ -158,7 +153,9 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		var log = BitOperations.Log2((uint)size);
 		var bin = log - 4;
 		if (bin < 0) { bin = 0; }
+
 		if (bin >= SegmentedConstants.ArenaBinCount) { bin = SegmentedConstants.ArenaBinCount - 1; }
+
 		return bin;
 	}
 
@@ -179,6 +176,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 			next.PrevOffset = offset;
 			WriteHeader(hdr.NextOffset, next);
 		}
+
 		binHeads[hdr.BinIndex] = offset;
 	}
 
@@ -191,11 +189,14 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		} else {
 			binHeads[hdr.BinIndex] = hdr.NextOffset;
 		}
-		if (hdr.NextOffset >= 0) {
-			var next = ReadHeader(hdr.NextOffset);
-			next.PrevOffset = hdr.PrevOffset;
-			WriteHeader(hdr.NextOffset, next);
+
+		if (hdr.NextOffset < 0) {
+			return;
 		}
+
+		var next = ReadHeader(hdr.NextOffset);
+		next.PrevOffset = hdr.PrevOffset;
+		WriteHeader(hdr.NextOffset, next);
 	}
 
 	// Merges with the immediately-following block if it is already free.
@@ -207,6 +208,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		if (successorOffset >= BumpOffset) {
 			return;
 		}
+
 		for (var b = 0; b < SegmentedConstants.ArenaBinCount; b++) {
 			var cursor = binHeads[b];
 			while (cursor >= 0) {
@@ -216,6 +218,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 					size += hdr.SizeBytes;
 					return;
 				}
+
 				cursor = hdr.NextOffset;
 			}
 		}
@@ -235,6 +238,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 					size += hdr.SizeBytes;
 					return;
 				}
+
 				cursor = hdr.NextOffset;
 			}
 		}

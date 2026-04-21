@@ -14,7 +14,10 @@ using System.Runtime.CompilerServices;
 internal sealed class SegmentedSlabTier : IDisposable
 {
 	[InlineArray(SegmentedConstants.SlabSizeClassCount)]
-	private struct ActiveSlabArray { private SegmentedSlab? _e; }
+	private struct ActiveSlabArray
+	{
+		private SegmentedSlab? _e;
+	}
 
 	// Chain invariant: every slab in activeSlabs[] has at least one free cell.
 	// Full slabs are detached from their chain on the cycle they fill; freeing a cell in a full slab re-links it.
@@ -26,10 +29,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 
 	public SegmentedSlabTier(int cellsPerSlab)
 	{
-		if (cellsPerSlab < 1) {
-			throw new ArgumentOutOfRangeException(nameof(cellsPerSlab));
-		}
-
+		ArgumentOutOfRangeException.ThrowIfLessThan(cellsPerSlab, 1);
 		this.cellsPerSlab = cellsPerSlab;
 	}
 
@@ -147,7 +147,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 	/// </summary>
 	public void Reserve(int smallChars)
 	{
-		var sizeClass = SegmentedConstants.SlabSizeClassCount - 1;
+		const int sizeClass = SegmentedConstants.SlabSizeClassCount - 1;
 		var perSlabChars = cellsPerSlab * (CellBytesForSizeClass(sizeClass) / sizeof(char));
 		while (allSlabs.Count * perSlabChars < smallChars) {
 			_ = AllocateNewSlab(sizeClass);

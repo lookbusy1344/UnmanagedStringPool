@@ -13,24 +13,22 @@ using System.Runtime.InteropServices;
 internal sealed class SegmentedSlab : IDisposable
 {
 	public readonly int SizeClass;
-	public readonly int CellBytes;
-	public readonly int CellCount;
 	public readonly IntPtr Buffer;
+	private readonly int cellBytes;
+	private readonly int cellCount;
 	private readonly ulong[] bitmap;
-	private int freeCells;
 	private bool disposed;
 
 	public SegmentedSlab(int sizeClass, int cellBytes, int cellCount)
 	{
-		if (cellBytes < SegmentedConstants.PtrAlignment) {
-			throw new ArgumentOutOfRangeException(nameof(cellBytes));
-		}
-		if (cellCount < 1 || cellCount > 65536) {
+		ArgumentOutOfRangeException.ThrowIfLessThan(cellBytes, SegmentedConstants.PtrAlignment);
+		if (cellCount is < 1 or > 65536) {
 			throw new ArgumentOutOfRangeException(nameof(cellCount));
 		}
+
 		SizeClass = sizeClass;
-		CellBytes = cellBytes;
-		CellCount = cellCount;
+		this.cellBytes = cellBytes;
+		this.cellCount = cellCount;
 		Buffer = Marshal.AllocHGlobal(cellBytes * cellCount);
 		var words = (cellCount + 63) / 64;
 		bitmap = new ulong[words];
@@ -38,17 +36,19 @@ internal sealed class SegmentedSlab : IDisposable
 		for (var w = 0; w < words; w++) {
 			bitmap[w] = ulong.MaxValue;
 		}
+
 		// Phantom bits past CellCount in the last word must be cleared so tzcnt never picks a non-existent cell.
 		var excess = (words * 64) - cellCount;
 		if (excess > 0) {
 			bitmap[^1] &= (1UL << (64 - excess)) - 1UL;
 		}
-		freeCells = cellCount;
+
+		FreeCells = cellCount;
 	}
 
-	public int FreeCells => freeCells;
+	public int FreeCells { get; private set; }
 
-	public bool IsFull => freeCells == 0;
+	public bool IsFull => FreeCells == 0;
 
 	public SegmentedSlab? NextInClass { get; set; }
 
@@ -60,18 +60,22 @@ internal sealed class SegmentedSlab : IDisposable
 	{
 		for (var w = 0; w < bitmap.Length; w++) {
 			var word = bitmap[w];
-			if (word != 0UL) {
-				// tzcnt finds the lowest set (free) bit; on x86 this is a single instruction.
-				var bit = BitOperations.TrailingZeroCount(word);
-				cellIndex = (w * 64) + bit;
-				if (cellIndex >= CellCount) {
-					break;
-				}
-				bitmap[w] = word & ~(1UL << bit); // flip free→used
-				--freeCells;
-				return true;
+			if (word == 0UL) {
+				continue;
 			}
+
+			// tzcnt finds the lowest set (free) bit; on x86 this is a single instruction.
+			var bit = BitOperations.TrailingZeroCount(word);
+			cellIndex = (w * 64) + bit;
+			if (cellIndex >= cellCount) {
+				break;
+			}
+
+			bitmap[w] = word & ~(1UL << bit); // flip free→used
+			--FreeCells;
+			return true;
 		}
+
 		cellIndex = -1;
 		return false;
 	}
@@ -79,30 +83,32 @@ internal sealed class SegmentedSlab : IDisposable
 	/// <summary>Marks a cell free by setting its bitmap bit. Throws if the cell is already free (double-free guard).</summary>
 	public void FreeCell(int cellIndex)
 	{
-		if ((uint)cellIndex >= (uint)CellCount) {
+		if ((uint)cellIndex >= (uint)cellCount) {
 			throw new ArgumentOutOfRangeException(nameof(cellIndex));
 		}
+
 		var w = cellIndex / 64;
 		var bit = cellIndex & 63;
 		var mask = 1UL << bit;
 		if ((bitmap[w] & mask) != 0UL) {
 			throw new InvalidOperationException("Cell already free");
 		}
+
 		bitmap[w] |= mask;
-		++freeCells;
+		++FreeCells;
 	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public int OffsetOfCell(int cellIndex) => cellIndex * CellBytes;
+	public int OffsetOfCell(int cellIndex) => cellIndex * cellBytes;
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public int CellIndexFromOffset(int offsetBytes) => offsetBytes / CellBytes;
+	public int CellIndexFromOffset(int offsetBytes) => offsetBytes / cellBytes;
 
 	public bool Contains(IntPtr ptr)
 	{
 		var raw = ptr.ToInt64();
 		var start = Buffer.ToInt64();
-		var end = start + ((long)CellBytes * CellCount);
+		var end = start + ((long)cellBytes * cellCount);
 		return raw >= start && raw < end;
 	}
 
@@ -115,20 +121,24 @@ internal sealed class SegmentedSlab : IDisposable
 		for (var w = 0; w < bitmap.Length; w++) {
 			bitmap[w] = ulong.MaxValue;
 		}
-		var excess = (bitmap.Length * 64) - CellCount;
+
+		var excess = (bitmap.Length * 64) - cellCount;
 		if (excess > 0) {
 			bitmap[^1] &= (1UL << (64 - excess)) - 1UL;
 		}
-		freeCells = CellCount;
+
+		FreeCells = cellCount;
 	}
 
-	public long UnmanagedBytes => (long)CellBytes * CellCount;
+	public long UnmanagedBytes => (long)cellBytes * cellCount;
 
 	public void Dispose()
 	{
-		if (!disposed) {
-			Marshal.FreeHGlobal(Buffer);
-			disposed = true;
+		if (disposed) {
+			return;
 		}
+
+		Marshal.FreeHGlobal(Buffer);
+		disposed = true;
 	}
 }

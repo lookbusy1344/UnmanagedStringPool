@@ -5,21 +5,21 @@ using System.Runtime.CompilerServices;
 
 internal static class SegmentedConstants
 {
-	public const uint HighBit = 0x80000000u;        // bit 31 of Generation: set=freed, clear=live
-	public const uint GenerationMask = 0x7FFFFFFFu;  // lower 31 bits: monotonically-increasing reuse counter
-	public const uint NoFreeSlot = 0xFFFFFFFFu;      // sentinel stored in freeHead when the slot free chain is empty
-	public const int PtrAlignment = 8;               // Marshal.AllocHGlobal guarantees ≥8-byte alignment, so low 3 bits of every pointer are always zero
-	public const long TierTagMask = 1L;              // bit 0 of a tagged pointer: 0=slab tier, 1=arena tier
-	public const long PtrMask = ~7L;                 // clears the 3 tag bits from a tagged pointer to recover the raw address
-	public const int TierSlab = 0;                   // bit 0 value: allocation lives in a slab cell
-	public const int TierArena = 1;                  // bit 0 value: allocation lives in an arena block
-	public const int SlabSizeClassCount = 5;         // five classes: 8/16/32/64/128 chars; doubling progression caps internal waste at <50% per live string
-	public const int MinArenaBlockBytes = 16;        // a free block must hold a SegmentedFreeBlockHeader (16 bytes) in its own payload
-	public const int ArenaBinCount = 16;             // bins 0..15 cover Log2(size)-4, so bin 0 = 16 B, bin 15 ≥ 256 KB
+	public const uint HighBit = 0x80000000u; // bit 31 of Generation: set=freed, clear=live
+	public const uint GenerationMask = 0x7FFFFFFFu; // lower 31 bits: monotonically-increasing reuse counter
+	public const uint NoFreeSlot = 0xFFFFFFFFu; // sentinel stored in freeHead when the slot free chain is empty
+	public const int PtrAlignment = 8; // Marshal.AllocHGlobal guarantees ≥8-byte alignment, so low 3 bits of every pointer are always zero
+	public const long TierTagMask = 1L; // bit 0 of a tagged pointer: 0=slab tier, 1=arena tier
+	public const long PtrMask = ~7L; // clears the 3 tag bits from a tagged pointer to recover the raw address
+	public const int TierSlab = 0; // bit 0 value: allocation lives in a slab cell
+	public const int TierArena = 1; // bit 0 value: allocation lives in an arena block
+	public const int SlabSizeClassCount = 5; // five classes: 8/16/32/64/128 chars; doubling progression caps internal waste at <50% per live string
+	public const int MinArenaBlockBytes = 16; // a free block must hold a SegmentedFreeBlockHeader (16 bytes) in its own payload
+	public const int ArenaBinCount = 16; // bins 0..15 cover Log2(size)-4, so bin 0 = 16 B, bin 15 ≥ 256 KB
 	public const int DefaultSlotCapacity = 64;
 	public const int DefaultSlabCellsPerSlab = 256;
-	public const int DefaultArenaSegmentBytes = 1 << 20;             // 1 MB: amortises Marshal.AllocHGlobal overhead over many large strings
-	public const int DefaultSmallStringThresholdChars = 128;         // strings ≤ threshold go to slab tier; above go to arena tier
+	public const int DefaultArenaSegmentBytes = 1 << 20; // 1 MB: amortises Marshal.AllocHGlobal overhead over many large strings
+	public const int DefaultSmallStringThresholdChars = 128; // strings ≤ threshold go to slab tier; above go to arena tier
 }
 
 public sealed record SegmentedStringPoolOptions(
@@ -47,14 +47,14 @@ public sealed class SegmentedStringPool : IDisposable
 	private readonly int smallThreshold;
 	private bool disposed;
 
-	public SegmentedStringPool() : this(new SegmentedStringPoolOptions()) { }
+	public SegmentedStringPool() : this(new()) { }
 
-	public SegmentedStringPool(SegmentedStringPoolOptions options)
+	private SegmentedStringPool(SegmentedStringPoolOptions options)
 	{
 		ArgumentNullException.ThrowIfNull(options);
-		slots = new SegmentedSlotTable(options.InitialSlotCapacity);
-		slabTier = new SegmentedSlabTier(options.SlabCellsPerSlab);
-		arenaTier = new SegmentedArenaTier(options.ArenaSegmentBytes);
+		slots = new(options.InitialSlotCapacity);
+		slabTier = new(options.SlabCellsPerSlab);
+		arenaTier = new(options.ArenaSegmentBytes);
 		smallThreshold = options.SmallStringThresholdChars;
 	}
 
@@ -75,6 +75,7 @@ public sealed class SegmentedStringPool : IDisposable
 		if (value.IsEmpty) {
 			return PooledStringRef.Empty;
 		}
+
 		var length = value.Length;
 		var ptr = AllocateUnmanaged(length, out var tier);
 		unsafe {
@@ -82,10 +83,11 @@ public sealed class SegmentedStringPool : IDisposable
 				Buffer.MemoryCopy(src, (void*)ptr, length * sizeof(char), length * sizeof(char));
 			}
 		}
+
 		// bit 0 of the raw pointer is guaranteed zero by 8-byte alignment, so OR-ing the tier tag is safe
 		var taggedPtr = new IntPtr((ptr.ToInt64() & SegmentedConstants.PtrMask) | (uint)tier);
 		var (slotIndex, gen) = slots.Allocate(taggedPtr, length);
-		return new PooledStringRef(this, slotIndex, gen);
+		return new(this, slotIndex, gen);
 	}
 
 	/// <summary>
@@ -98,9 +100,10 @@ public sealed class SegmentedStringPool : IDisposable
 		if (!slots.TryReadSlot(slotIndex, generation, out var entry)) {
 			throw new InvalidOperationException("PooledStringRef is stale or freed");
 		}
+
 		var raw = new IntPtr(entry.Ptr.ToInt64() & SegmentedConstants.PtrMask);
 		unsafe {
-			return new ReadOnlySpan<char>((void*)raw, entry.LengthChars);
+			return new((void*)raw, entry.LengthChars);
 		}
 	}
 
@@ -108,10 +111,9 @@ public sealed class SegmentedStringPool : IDisposable
 	internal int GetLength(uint slotIndex, uint generation)
 	{
 		ObjectDisposedException.ThrowIf(disposed, typeof(SegmentedStringPool));
-		if (!slots.TryReadSlot(slotIndex, generation, out var entry)) {
-			throw new InvalidOperationException("PooledStringRef is stale or freed");
-		}
-		return entry.LengthChars;
+		return !slots.TryReadSlot(slotIndex, generation, out var entry)
+			? throw new InvalidOperationException("PooledStringRef is stale or freed")
+			: entry.LengthChars;
 	}
 
 	/// <summary>
@@ -121,9 +123,11 @@ public sealed class SegmentedStringPool : IDisposable
 	internal void FreeSlot(uint slotIndex, uint generation)
 	{
 		if (disposed) { return; } // silent: guards against PooledStringRef.Dispose() racing pool.Dispose()
+
 		if (!slots.TryReadSlot(slotIndex, generation, out var entry)) {
 			return;
 		}
+
 		var raw = new IntPtr(entry.Ptr.ToInt64() & SegmentedConstants.PtrMask);
 		var tier = (int)(entry.Ptr.ToInt64() & SegmentedConstants.TierTagMask);
 		if (tier == SegmentedConstants.TierSlab) {
@@ -133,6 +137,7 @@ public sealed class SegmentedStringPool : IDisposable
 			var seg = arenaTier.LocateSegmentByPointer(raw);
 			SegmentedArenaTier.Free(raw, entry.LengthChars * sizeof(char), seg);
 		}
+
 		_ = slots.Free(slotIndex, generation);
 	}
 
@@ -159,6 +164,7 @@ public sealed class SegmentedStringPool : IDisposable
 		if (chars <= 0) {
 			return;
 		}
+
 		var smallBudget = chars / 2;
 		var largeBudget = chars - smallBudget;
 		slabTier.Reserve(smallBudget);
@@ -173,6 +179,7 @@ public sealed class SegmentedStringPool : IDisposable
 			slabTier.Dispose();
 			arenaTier.Dispose();
 		}
+
 		GC.SuppressFinalize(this);
 	}
 
@@ -189,6 +196,7 @@ public sealed class SegmentedStringPool : IDisposable
 			tier = SegmentedConstants.TierSlab;
 			return slabTier.Allocate(charCount, out _);
 		}
+
 		tier = SegmentedConstants.TierArena;
 		var byteCount = charCount * sizeof(char);
 		return arenaTier.Allocate(byteCount, out _);

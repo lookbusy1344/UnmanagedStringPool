@@ -12,18 +12,15 @@ internal sealed class SegmentedSlotTable
 	private SegmentedSlotEntry[] slots;
 	private int highWater;
 	private uint freeHead;
-	private int activeCount;
 
 	public SegmentedSlotTable(int initialCapacity)
 	{
-		if (initialCapacity < 1) {
-			throw new ArgumentOutOfRangeException(nameof(initialCapacity));
-		}
+		ArgumentOutOfRangeException.ThrowIfLessThan(initialCapacity, 1);
 		slots = new SegmentedSlotEntry[initialCapacity];
 		freeHead = SegmentedConstants.NoFreeSlot;
 	}
 
-	public int ActiveCount => activeCount;
+	public int ActiveCount { get; private set; }
 
 	public int Capacity => slots.Length;
 
@@ -43,6 +40,7 @@ internal sealed class SegmentedSlotTable
 			if (highWater == slots.Length) {
 				Grow();
 			}
+
 			slotIndex = (uint)highWater;
 			++highWater;
 		}
@@ -52,7 +50,7 @@ internal sealed class SegmentedSlotTable
 		slot.Ptr = ptr;
 		slot.LengthChars = lengthChars;
 		slot.Generation = newGen;
-		++activeCount;
+		++ActiveCount;
 		return (slotIndex, newGen);
 	}
 
@@ -66,20 +64,23 @@ internal sealed class SegmentedSlotTable
 		if (slotIndex >= (uint)highWater) {
 			return false;
 		}
+
 		ref var slot = ref slots[slotIndex];
 		if (SegmentedSlotEntry.IsFree(slot.Generation)) {
 			return false;
 		}
+
 		if (slot.Generation != generation) {
 			return false;
 		}
+
 		var bumped = SegmentedSlotEntry.MarkFreeAndBumpGen(slot.Generation);
 		// Repurpose Ptr to store the next-free-slot index; the real pointer is no longer needed.
-		slot.Ptr = new IntPtr((long)freeHead);
+		slot.Ptr = new((long)freeHead);
 		slot.LengthChars = 0;
 		slot.Generation = bumped;
 		freeHead = slotIndex;
-		--activeCount;
+		--ActiveCount;
 		return true;
 	}
 
@@ -94,12 +95,14 @@ internal sealed class SegmentedSlotTable
 			entry = default;
 			return false;
 		}
+
 		entry = slots[slotIndex];
-		if (entry.Generation != generation) {
-			entry = default;
-			return false;
+		if (entry.Generation == generation) {
+			return true;
 		}
-		return true;
+
+		entry = default;
+		return false;
 	}
 
 	public ref SegmentedSlotEntry SlotRef(uint slotIndex) => ref slots[slotIndex];
@@ -115,13 +118,15 @@ internal sealed class SegmentedSlotTable
 			if (!SegmentedSlotEntry.IsFree(slot.Generation)) {
 				slot.Generation = SegmentedSlotEntry.MarkFreeAndBumpGen(slot.Generation);
 			}
+
 			// Thread the free chain through Ptr in sequential index order.
 			var nextIndex = i + 1 < highWater ? (long)(i + 1) : (long)SegmentedConstants.NoFreeSlot;
-			slot.Ptr = new IntPtr(nextIndex);
+			slot.Ptr = new(nextIndex);
 			slot.LengthChars = 0;
 		}
+
 		freeHead = highWater == 0 ? SegmentedConstants.NoFreeSlot : 0u;
-		activeCount = 0;
+		ActiveCount = 0;
 	}
 
 	/// <summary>
@@ -134,6 +139,7 @@ internal sealed class SegmentedSlotTable
 		if ((uint)newCapacity > (uint)int.MaxValue) {
 			throw new OutOfMemoryException("Slot table capacity exceeded");
 		}
+
 		Array.Resize(ref slots, newCapacity);
 	}
 }

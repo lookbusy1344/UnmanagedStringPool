@@ -15,9 +15,7 @@ internal sealed class SegmentedArenaTier : IDisposable
 
 	public SegmentedArenaTier(int segmentBytes)
 	{
-		if (segmentBytes < SegmentedConstants.MinArenaBlockBytes) {
-			throw new ArgumentOutOfRangeException(nameof(segmentBytes));
-		}
+		ArgumentOutOfRangeException.ThrowIfLessThan(segmentBytes, SegmentedConstants.MinArenaBlockBytes);
 		defaultSegmentBytes = segmentBytes;
 	}
 
@@ -31,6 +29,7 @@ internal sealed class SegmentedArenaTier : IDisposable
 			foreach (var s in segments) {
 				total += s.UnmanagedBytes;
 			}
+
 			return total;
 		}
 	}
@@ -43,11 +42,14 @@ internal sealed class SegmentedArenaTier : IDisposable
 	public IntPtr Allocate(int byteCount, out SegmentedArenaSegment owningSegment)
 	{
 		foreach (var s in segments) {
-			if (s.TryAllocate(byteCount, out var ptr)) {
-				owningSegment = s;
-				return ptr;
+			if (!s.TryAllocate(byteCount, out var ptr)) {
+				continue;
 			}
+
+			owningSegment = s;
+			return ptr;
 		}
+
 		var capacity = Math.Max(defaultSegmentBytes, byteCount);
 		var segment = new SegmentedArenaSegment(capacity);
 		segments.Add(segment);
@@ -74,6 +76,7 @@ internal sealed class SegmentedArenaTier : IDisposable
 				return s;
 			}
 		}
+
 		throw new InvalidOperationException("Pointer does not belong to any arena segment");
 	}
 
@@ -94,9 +97,10 @@ internal sealed class SegmentedArenaTier : IDisposable
 		foreach (var s in segments) {
 			totalBytes += s.Capacity;
 		}
+
 		while (totalBytes < bytes) {
 			var next = Math.Max(defaultSegmentBytes, bytes - totalBytes);
-			segments.Add(new SegmentedArenaSegment(next));
+			segments.Add(new(next));
 			totalBytes += next;
 		}
 	}
@@ -106,6 +110,7 @@ internal sealed class SegmentedArenaTier : IDisposable
 		foreach (var s in segments) {
 			s.Dispose();
 		}
+
 		segments.Clear();
 	}
 }
