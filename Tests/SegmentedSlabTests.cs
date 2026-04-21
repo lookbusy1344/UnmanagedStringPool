@@ -6,7 +6,7 @@ using Xunit;
 
 public sealed class SegmentedSlabTests : IDisposable
 {
-	private readonly SegmentedSlab slab = new(cellBytes: 16, cellCount: 8);
+	private readonly SegmentedSlab slab = new(sizeClass: 0, cellBytes: 16, cellCount: 8);
 
 	public void Dispose()
 	{

@@ -12,6 +12,7 @@ using System.Runtime.InteropServices;
 /// </summary>
 internal sealed class SegmentedSlab : IDisposable
 {
+	public readonly int SizeClass;
 	public readonly int CellBytes;
 	public readonly int CellCount;
 	public readonly IntPtr Buffer;
@@ -19,7 +20,7 @@ internal sealed class SegmentedSlab : IDisposable
 	private int freeCells;
 	private bool disposed;
 
-	public SegmentedSlab(int cellBytes, int cellCount)
+	public SegmentedSlab(int sizeClass, int cellBytes, int cellCount)
 	{
 		if (cellBytes < SegmentedConstants.PtrAlignment) {
 			throw new ArgumentOutOfRangeException(nameof(cellBytes));
@@ -27,6 +28,7 @@ internal sealed class SegmentedSlab : IDisposable
 		if (cellCount < 1 || cellCount > 65536) {
 			throw new ArgumentOutOfRangeException(nameof(cellCount));
 		}
+		SizeClass = sizeClass;
 		CellBytes = cellBytes;
 		CellCount = cellCount;
 		Buffer = Marshal.AllocHGlobal(cellBytes * cellCount);

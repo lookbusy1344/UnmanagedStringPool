@@ -13,8 +13,6 @@ using System.Runtime.CompilerServices;
 /// </summary>
 internal sealed class SegmentedSlabTier : IDisposable
 {
-	private static ReadOnlySpan<int> SizeClassChars => [8, 16, 32, 64, 128];
-
 	[InlineArray(SegmentedConstants.SlabSizeClassCount)]
 	private struct ActiveSlabArray { private SegmentedSlab? _e; }
 
@@ -65,8 +63,9 @@ internal sealed class SegmentedSlabTier : IDisposable
 			_ => -1
 		};
 
+	// Size classes are a doubling sequence starting at 8 chars: 8<<0=8, 8<<1=16, ..., 8<<4=128.
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public static int CellBytesForSizeClass(int sizeClass) => SizeClassChars[sizeClass] * sizeof(char);
+	public static int CellBytesForSizeClass(int sizeClass) => (8 << sizeClass) * sizeof(char);
 
 	/// <summary>
 	/// Allocates one cell from the appropriate size-class chain. If the chain head fills after allocation
@@ -104,7 +103,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 		var offset = (int)(ptr.ToInt64() - slab.Buffer.ToInt64());
 		slab.FreeCell(slab.CellIndexFromOffset(offset));
 		if (wasFull) {
-			LinkAtHead(SizeClassForCellBytes(slab.CellBytes), slab);
+			LinkAtHead(slab.SizeClass, slab);
 		}
 	}
 
@@ -138,7 +137,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 		// Re-thread every slab into its size-class chain in allSlabs insertion order.
 		// LinkAtHead prepends, so the last slab processed for a class ends up as the chain head.
 		foreach (var s in allSlabs) {
-			LinkAtHead(SizeClassForCellBytes(s.CellBytes), s);
+			LinkAtHead(s.SizeClass, s);
 		}
 	}
 
@@ -169,7 +168,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 
 	private SegmentedSlab AllocateNewSlab(int sizeClass)
 	{
-		var slab = new SegmentedSlab(CellBytesForSizeClass(sizeClass), cellsPerSlab);
+		var slab = new SegmentedSlab(sizeClass, CellBytesForSizeClass(sizeClass), cellsPerSlab);
 		allSlabs.Add(slab);
 		LinkAtHead(sizeClass, slab);
 		return slab;
@@ -190,15 +189,5 @@ internal sealed class SegmentedSlabTier : IDisposable
 
 		activeSlabs[sizeClass] = head.NextInClass;
 		head.NextInClass = null;
-	}
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	private static int SizeClassForCellBytes(int cellBytes)
-	{
-		for (var i = 0; i < SizeClassChars.Length; i++) {
-			if (CellBytesForSizeClass(i) == cellBytes) { return i; }
-		}
-
-		throw new InvalidOperationException("Unknown cell size");
 	}
 }
