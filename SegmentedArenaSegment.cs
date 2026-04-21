@@ -24,10 +24,13 @@ internal struct SegmentedFreeBlockHeader
 /// </summary>
 internal sealed class SegmentedArenaSegment : IDisposable
 {
+	[InlineArray(SegmentedConstants.ArenaBinCount)]
+	private struct BinHeadArray { private int _e; }
+
 	public readonly IntPtr Buffer;
 	public readonly int Capacity;
 	public int BumpOffset;
-	private readonly int[] binHeads;
+	private BinHeadArray binHeads;
 	private bool disposed;
 
 	public SegmentedArenaSegment(int capacity)
@@ -37,8 +40,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		}
 		Capacity = capacity;
 		Buffer = Marshal.AllocHGlobal(capacity);
-		binHeads = new int[SegmentedConstants.ArenaBinCount];
-		for (var i = 0; i < binHeads.Length; i++) {
+		for (var i = 0; i < SegmentedConstants.ArenaBinCount; i++) {
 			binHeads[i] = -1;
 		}
 	}
@@ -64,7 +66,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	{
 		var size = AlignSize(byteCount);
 		var startBin = BinIndexForSize(size);
-		for (var b = startBin; b < binHeads.Length; b++) {
+		for (var b = startBin; b < SegmentedConstants.ArenaBinCount; b++) {
 			var head = binHeads[b];
 			while (head >= 0) {
 				var hdr = ReadHeader(head);
@@ -124,7 +126,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	public void Reset()
 	{
 		BumpOffset = 0;
-		for (var i = 0; i < binHeads.Length; i++) {
+		for (var i = 0; i < SegmentedConstants.ArenaBinCount; i++) {
 			binHeads[i] = -1;
 		}
 	}
@@ -205,7 +207,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		if (successorOffset >= BumpOffset) {
 			return;
 		}
-		for (var b = 0; b < binHeads.Length; b++) {
+		for (var b = 0; b < SegmentedConstants.ArenaBinCount; b++) {
 			var cursor = binHeads[b];
 			while (cursor >= 0) {
 				var hdr = ReadHeader(cursor);
@@ -223,7 +225,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	// Scans all bins looking for a free block whose end address equals our start.
 	private void TryCoalesceBackward(ref int offset, ref int size)
 	{
-		for (var b = 0; b < binHeads.Length; b++) {
+		for (var b = 0; b < SegmentedConstants.ArenaBinCount; b++) {
 			var cursor = binHeads[b];
 			while (cursor >= 0) {
 				var hdr = ReadHeader(cursor);
