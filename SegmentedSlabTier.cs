@@ -13,7 +13,7 @@ using System.Runtime.CompilerServices;
 /// </summary>
 internal sealed class SegmentedSlabTier : IDisposable
 {
-	private static readonly int[] SizeClassChars = [8, 16, 32, 64, 128];
+	private static ReadOnlySpan<int> SizeClassChars => [8, 16, 32, 64, 128];
 
 	[InlineArray(SegmentedConstants.SlabSizeClassCount)]
 	private struct ActiveSlabArray { private SegmentedSlab? _e; }
