@@ -15,7 +15,13 @@ Tests must be run with `gtimeout`.
 
 ## Code Quality
 
-**IMPORTANT:** Always run the `pre-commit` skill before every commit — do not skip it. It runs format, analyzer check, and tests in sequence and must fully pass before committing.
+**IMPORTANT:** Run the following steps in sequence before every commit. All three must pass — do not skip or commit on failure. Stop and fix on any failure — never skip with `--no-verify`.
+
+```bash
+dotnet build
+dotnet format
+gtimeout 120 dotnet test
+```
 
 ## Architecture
 

@@ -5,19 +5,10 @@ description: Run the full pre-commit quality check for this project (format, ana
 
 Run the following commands in sequence, stopping and reporting on any failure:
 
-1. **Format** — apply consistent formatting:
-   ```bash
-   dotnet format
-   ```
+**IMPORTANT:** Run the following steps in sequence before every commit. All three must pass — do not skip or commit on failure. Stop and fix on any failure — never skip with `--no-verify`.
 
-2. **Analyzer check** — enforce code style and analysis rules:
-   ```bash
-   dotnet build /p:EnforceCodeStyleInBuild=true --no-incremental
-   ```
-
-3. **Tests** — confirm nothing is broken (use gtimeout since coreutils is installed):
-   ```bash
-   gtimeout 120 dotnet test
-   ```
-
-Report pass/fail for each step. If any step fails, stop and show the relevant output. Do not proceed to commit until all three pass.
+```bash
+dotnet build
+dotnet format
+gtimeout 120 dotnet test
+```
