@@ -173,17 +173,25 @@ public sealed class SegmentedStringPool : IDisposable
 
 	public void Dispose()
 	{
-		if (!disposed) {
-			disposed = true;
+		Dispose(true);
+		GC.SuppressFinalize(this);
+	}
+
+	~SegmentedStringPool() => Dispose(false);
+
+	private void Dispose(bool disposing)
+	{
+		if (disposed) {
+			return;
+		}
+
+		disposed = true;
+		if (disposing) {
 			slots.ClearAllSlots();
 			slabTier.Dispose();
 			arenaTier.Dispose();
 		}
-
-		GC.SuppressFinalize(this);
 	}
-
-	~SegmentedStringPool() => Dispose();
 
 	/// <summary>
 	/// Routes an allocation to the slab tier (≤ threshold) or arena tier (> threshold)
