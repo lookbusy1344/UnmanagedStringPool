@@ -141,5 +141,8 @@ internal sealed class SegmentedSlab : IDisposable
 
 		Marshal.FreeHGlobal(Buffer);
 		disposed = true;
+		GC.SuppressFinalize(this);
 	}
+
+	~SegmentedSlab() => Dispose();
 }

@@ -135,7 +135,10 @@ internal sealed class SegmentedArenaSegment : IDisposable
 
 		Marshal.FreeHGlobal(Buffer);
 		disposed = true;
+		GC.SuppressFinalize(this);
 	}
+
+	~SegmentedArenaSegment() => Dispose();
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	private static int AlignSize(int size)
