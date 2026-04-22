@@ -138,6 +138,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	/// Currently only unmanaged resources (Buffer) need cleanup, so the parameter is unused. If managed resources
 	/// (e.g., IDisposable fields) are added later, they should only be disposed when disposing=true.
 	/// </summary>
+	// ReSharper disable once UnusedParameter.Local
 	private void Dispose(bool disposing)
 	{
 		if (!disposed) {
