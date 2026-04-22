@@ -135,12 +135,11 @@ internal sealed class SegmentedSlab : IDisposable
 
 	public void Dispose()
 	{
-		if (disposed) {
-			return;
+		if (!disposed) {
+			Marshal.FreeHGlobal(Buffer);
+			disposed = true;
 		}
 
-		Marshal.FreeHGlobal(Buffer);
-		disposed = true;
 		GC.SuppressFinalize(this);
 	}
 

@@ -129,16 +129,13 @@ internal sealed class SegmentedArenaSegment : IDisposable
 
 	public void Dispose()
 	{
-		if (disposed) {
-			return;
+		if (!disposed) {
+			Marshal.FreeHGlobal(Buffer);
+			disposed = true;
 		}
 
-		Marshal.FreeHGlobal(Buffer);
-		disposed = true;
 		GC.SuppressFinalize(this);
 	}
-
-	~SegmentedArenaSegment() => Dispose();
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	private static int AlignSize(int size)
@@ -246,4 +243,6 @@ internal sealed class SegmentedArenaSegment : IDisposable
 			}
 		}
 	}
+
+	~SegmentedArenaSegment() => Dispose();
 }

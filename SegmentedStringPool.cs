@@ -177,8 +177,6 @@ public sealed class SegmentedStringPool : IDisposable
 		GC.SuppressFinalize(this);
 	}
 
-	~SegmentedStringPool() => Dispose(false);
-
 	private void Dispose(bool disposing)
 	{
 		if (disposed) {
@@ -209,4 +207,6 @@ public sealed class SegmentedStringPool : IDisposable
 		var byteCount = charCount * sizeof(char);
 		return arenaTier.Allocate(byteCount, out _);
 	}
+
+	~SegmentedStringPool() => Dispose(false);
 }
