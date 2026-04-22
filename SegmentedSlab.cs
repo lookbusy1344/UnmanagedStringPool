@@ -135,13 +135,22 @@ internal sealed class SegmentedSlab : IDisposable
 
 	public void Dispose()
 	{
+		Dispose(true);
+		GC.SuppressFinalize(this);
+	}
+
+	/// <summary>
+	/// Dispose pattern: disposing=true means Dispose() was called explicitly; disposing=false means finalizer is running.
+	/// Currently only unmanaged resources (Buffer) need cleanup, so the parameter is unused. If managed resources
+	/// (e.g., IDisposable fields) are added later, they should only be disposed when disposing=true.
+	/// </summary>
+	private void Dispose(bool disposing)
+	{
 		if (!disposed) {
 			Marshal.FreeHGlobal(Buffer);
 			disposed = true;
 		}
-
-		GC.SuppressFinalize(this);
 	}
 
-	~SegmentedSlab() => Dispose();
+	~SegmentedSlab() => Dispose(false);
 }
