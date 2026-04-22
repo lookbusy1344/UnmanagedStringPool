@@ -87,7 +87,7 @@ Layer diagram:
                    ┌────┴────┐
   Storage layer:  Slab      Arena Segment
                  (cells)    (blocks)
-                   │        │
+                   │         │
   Unmanaged memory:  raw bytes of the string (UTF-16 chars)
 ```
 
@@ -323,8 +323,8 @@ the chain heads in `activeSlabs[5]`:
 
 ```
 activeSlabs[1] ──→ SlabR (NextInClass) ──→ SlabQ (NextInClass) ──→ null
-                   16-char cells              16-char cells
-                   has free cells             has free cells
+                   16-char cells           16-char cells
+                   has free cells          has free cells
 ```
 
 **Chain invariant:** every slab on a chain has at least one free cell.
@@ -402,13 +402,13 @@ overwritten with a `SegmentedFreeBlockHeader`:
 
 ```
 Live block:                          Free block:
-┌────────────────────────┐           ┌───────────────────-─────┐
-│ h e l l o   w o r l d  │           │ SizeBytes  (int)        │ ← 16-byte header
-│  ... UTF-16 chars ...  │           │ NextOffset (int, -1=end │    written directly
-│                        │           │ PrevOffset (int, -1=head│    into the freed
-│                        │           │ BinIndex   (int)        │    memory
-│                        │           │ (remaining bytes idle)  │
-└────────────────────────┘           └───────────────────-─────┘
+┌────────────────────────┐           ┌──────────────────────────┐
+│ h e l l o   w o r l d  │           │ SizeBytes  (int)         │ ← 16-byte header
+│  ... UTF-16 chars ...  │           │ NextOffset (int, -1=end  │    written directly
+│                        │           │ PrevOffset (int, -1=head │    into the freed
+│                        │           │ BinIndex   (int)         │    memory
+│                        │           │ (remaining bytes idle)   │
+└────────────────────────┘           └──────────────────────────┘
 ```
 
 This is why the minimum block size is 16 bytes — a free block must be large
@@ -487,7 +487,7 @@ Every field in this pool does two jobs. Here's how each one is carved up.
 
 ### 4.1 Tagged pointer — tier bit in the low bit
 
-`Marshal.AllocHGlobal` guarantees 8-byte alignment on every supported
+`Marshal.AllocHGlobal` guarantees 8-byte (64 bit) alignment on every supported
 platform. That makes the low **3 bits** of every raw pointer zero — free
 real estate. Bit 0 is used to record which tier owns the block.
 
@@ -782,10 +782,10 @@ live block (holds an allocated string):
   (no header; length comes from the slot entry's LengthChars)
 
 free block (on a bin chain):
-  +0   SizeBytes   (int)         ┐
+  +0   SizeBytes   (int)          ┐
   +4   NextOffset  (int, -1=tail) │  16-byte header
   +8   PrevOffset  (int, -1=head) │
-  +12  BinIndex    (int)         ┘
+  +12  BinIndex    (int)          ┘
   +16  (unused but reserved as part of the block)
 ```
 
@@ -797,7 +797,7 @@ Bin heads live in `int[] binHeads` on the segment:
 
 ```
 binHeads[3] → @1024 (48 B) ↔ @4096 (56 B) ↔ @8192 (48 B) → -1
-               prev=-1                          next=-1
+                prev=-1                       next=-1
 ```
 
 Allocation walks from the smallest sufficient bin upward. If the chosen
