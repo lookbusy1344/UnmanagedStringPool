@@ -101,11 +101,14 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 		value.CopyTo(buffer.Slice(index));
 		original.Slice(index).CopyTo(buffer.Slice(index + value.Length));
 
-		var result = Pool.Allocate(buffer);
-		if (rented is not null) {
-			ArrayPool<char>.Shared.Return(rented);
+		try {
+			return Pool.Allocate(buffer);
 		}
-		return result;
+		finally {
+			if (rented is not null) {
+				ArrayPool<char>.Shared.Return(rented);
+			}
+		}
 	}
 
 	public PooledStringRef Replace(ReadOnlySpan<char> oldValue, ReadOnlySpan<char> newValue)
@@ -173,14 +176,17 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 		}
 		source.Slice(srcCursor).CopyTo(buffer.Slice(dstCursor));
 
-		var result = Pool.Allocate(buffer);
-		if (rentedMatches is not null) {
-			ArrayPool<int>.Shared.Return(rentedMatches);
+		try {
+			return Pool.Allocate(buffer);
 		}
-		if (rentedChars is not null) {
-			ArrayPool<char>.Shared.Return(rentedChars);
+		finally {
+			if (rentedMatches is not null) {
+				ArrayPool<int>.Shared.Return(rentedMatches);
+			}
+			if (rentedChars is not null) {
+				ArrayPool<char>.Shared.Return(rentedChars);
+			}
 		}
-		return result;
 	}
 
 	// ---- equality + hash ----

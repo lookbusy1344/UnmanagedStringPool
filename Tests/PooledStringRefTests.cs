@@ -305,6 +305,30 @@ public sealed class PooledStringRefReplaceTests : IDisposable
 		var r = pool.Allocate("abc");
 		_ = Assert.Throws<ArgumentException>(() => r.Replace("", "x"));
 	}
+
+	// P0-5: verify the heap-rented paths (totalLength > 256) complete without leaking.
+	// The direct mid-Allocate throw scenario requires concurrent pool.Dispose(), which violates
+	// the single-threaded contract; we validate the structural fix via the happy path and
+	// that exceptions reaching us (from argument errors) are not swallowed.
+	[Fact]
+	public void Insert_LargeString_HeapRentedPath_RoundTrips()
+	{
+		var src = new string('a', 200);
+		var ins = new string('b', 100); // total 300 > 256 → forces ArrayPool rent
+		var r = pool.Allocate(src);
+		var result = r.Insert(100, ins.AsSpan());
+		Assert.Equal(src.Insert(100, ins), result.AsSpan().ToString());
+	}
+
+	[Fact]
+	public void Replace_ManyMatches_OverflowsInlineMatchBuffer()
+	{
+		// 65 matches exceeds the 64-entry inline stackalloc, forcing rentedMatches ArrayPool path
+		var src = string.Concat(Enumerable.Repeat("x|", 65));
+		var r = pool.Allocate(src);
+		var result = r.Replace("|", "-");
+		Assert.Equal(src.Replace("|", "-", StringComparison.Ordinal), result.AsSpan().ToString());
+	}
 }
 
 // Task 14: Equals / GetHashCode / ToString
