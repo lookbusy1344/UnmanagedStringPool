@@ -19,6 +19,19 @@ internal struct SegmentedFreeBlockHeader
 }
 
 /// <summary>
+/// Boundary-tag footer written at the last 8 bytes of every free block.
+/// Enables O(1) backward coalescing: when freeing a block at offset N, read the
+/// footer at N−8 to check if the preceding block is free and get its size.
+/// In-use blocks do not carry a footer — the IsFree flag distinguishes stale data.
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Size = 8)]
+internal struct SegmentedFreeBlockFooter
+{
+	public int SizeBytes; // mirrors header SizeBytes so we can locate the header
+	public int IsFree;    // non-zero when the block is on the free list
+}
+
+/// <summary>
 /// A single arena segment. Bump allocator from the tail + free list from the head, via segregated
 /// bins keyed by Log2(blockSize). Free blocks embed their own link headers.
 /// </summary>
@@ -76,7 +89,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 			while (head >= 0) {
 				var hdr = ReadHeader(head);
 				if (hdr.SizeBytes >= size) {
-					UnlinkFromBin(ref hdr);
+					UnlinkFromBin(ref hdr, head);
 					var remainder = hdr.SizeBytes - size;
 					if (remainder >= SegmentedConstants.MinArenaBlockBytes) {
 						// Split the block: the tail portion becomes a new free block in its own bin.
@@ -187,6 +200,30 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	private unsafe void WriteHeader(int offset, SegmentedFreeBlockHeader header) =>
 		*(SegmentedFreeBlockHeader*)(Buffer.ToInt64() + offset) = header;
 
+	private unsafe SegmentedFreeBlockFooter ReadFooter(int offset) =>
+		*(SegmentedFreeBlockFooter*)(Buffer.ToInt64() + offset);
+
+	private unsafe void WriteFooter(int offset, SegmentedFreeBlockFooter footer) =>
+		*(SegmentedFreeBlockFooter*)(Buffer.ToInt64() + offset) = footer;
+
+	// Writes the boundary-tag footer at the end of a free block.
+	// footerOffset = blockOffset + blockSize - sizeof(SegmentedFreeBlockFooter)
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	private void MarkFooterFree(int blockOffset, int blockSize)
+	{
+		var footerOffset = blockOffset + blockSize - Unsafe.SizeOf<SegmentedFreeBlockFooter>();
+		WriteFooter(footerOffset, new() { SizeBytes = blockSize, IsFree = 1 });
+	}
+
+	// Clears the free flag in the boundary-tag footer when a block is allocated.
+	// Prevents stale footer data from being misread during coalescing of a neighbouring block.
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	private void MarkFooterInUse(int blockOffset, int blockSize)
+	{
+		var footerOffset = blockOffset + blockSize - Unsafe.SizeOf<SegmentedFreeBlockFooter>();
+		WriteFooter(footerOffset, new() { SizeBytes = blockSize, IsFree = 0 });
+	}
+
 	private void LinkIntoBin(int offset)
 	{
 		var hdr = ReadHeader(offset);
@@ -200,9 +237,10 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		}
 
 		binHeads[hdr.BinIndex] = offset;
+		MarkFooterFree(offset, hdr.SizeBytes);
 	}
 
-	private void UnlinkFromBin(ref SegmentedFreeBlockHeader hdr)
+	private void UnlinkFromBin(ref SegmentedFreeBlockHeader hdr, int offset)
 	{
 		if (hdr.PrevOffset >= 0) {
 			var prev = ReadHeader(hdr.PrevOffset);
@@ -212,18 +250,17 @@ internal sealed class SegmentedArenaSegment : IDisposable
 			binHeads[hdr.BinIndex] = hdr.NextOffset;
 		}
 
-		if (hdr.NextOffset < 0) {
-			return;
+		if (hdr.NextOffset >= 0) {
+			var next = ReadHeader(hdr.NextOffset);
+			next.PrevOffset = hdr.PrevOffset;
+			WriteHeader(hdr.NextOffset, next);
 		}
 
-		var next = ReadHeader(hdr.NextOffset);
-		next.PrevOffset = hdr.PrevOffset;
-		WriteHeader(hdr.NextOffset, next);
+		MarkFooterInUse(offset, hdr.SizeBytes);
 	}
 
-	// Merges with the immediately-following block if it is already free.
-	// The BumpOffset guard prevents us from scanning past the bump into uninitialised memory
-	// (blocks beyond BumpOffset have no headers to read).
+	// O(1): the successor header is at a known offset; read it directly.
+	// The BumpOffset guard prevents reads into uninitialised bump memory.
 	private void TryCoalesceForward(ref int offset, ref int size)
 	{
 		var successorOffset = offset + size;
@@ -231,39 +268,61 @@ internal sealed class SegmentedArenaSegment : IDisposable
 			return;
 		}
 
-		for (var b = 0; b < SegmentedConstants.ArenaBinCount; ++b) {
-			var cursor = binHeads[b];
-			while (cursor >= 0) {
-				var hdr = ReadHeader(cursor);
-				if (cursor == successorOffset) {
-					UnlinkFromBin(ref hdr);
-					size += hdr.SizeBytes;
-					return;
-				}
-
-				cursor = hdr.NextOffset;
-			}
+		var hdr = ReadHeader(successorOffset);
+		if (hdr.SizeBytes > 0 && IsInBin(successorOffset, hdr.BinIndex)) {
+			UnlinkFromBin(ref hdr, successorOffset);
+			size += hdr.SizeBytes;
 		}
 	}
 
-	// Merges with the immediately-preceding block if it is already free.
-	// Scans all bins looking for a free block whose end address equals our start.
+	// O(1): read the footer immediately before our block to find a free predecessor.
 	private void TryCoalesceBackward(ref int offset, ref int size)
 	{
-		for (var b = 0; b < SegmentedConstants.ArenaBinCount; ++b) {
-			var cursor = binHeads[b];
-			while (cursor >= 0) {
-				var hdr = ReadHeader(cursor);
-				if (cursor + hdr.SizeBytes == offset) {
-					UnlinkFromBin(ref hdr);
-					offset = cursor;
-					size += hdr.SizeBytes;
-					return;
-				}
-
-				cursor = hdr.NextOffset;
-			}
+		var footerSize = Unsafe.SizeOf<SegmentedFreeBlockFooter>();
+		if (offset < footerSize) {
+			return;
 		}
+
+		var footer = ReadFooter(offset - footerSize);
+		if (footer.IsFree == 0 || footer.SizeBytes <= 0) {
+			return;
+		}
+
+		var predOffset = offset - footer.SizeBytes;
+		if (predOffset < 0) {
+			return;
+		}
+
+		var hdr = ReadHeader(predOffset);
+		// Confirm the header agrees — guards against stale footer data.
+		if (hdr.SizeBytes != footer.SizeBytes || !IsInBin(predOffset, hdr.BinIndex)) {
+			return;
+		}
+
+		UnlinkFromBin(ref hdr, predOffset);
+		offset = predOffset;
+		size += hdr.SizeBytes;
+	}
+
+	// Confirms a block at 'offset' is the current head or is reachable in the given bin.
+	// Used as a consistency guard after reading boundary-tag data.
+	private bool IsInBin(int offset, int binIndex)
+	{
+		if ((uint)binIndex >= (uint)SegmentedConstants.ArenaBinCount) {
+			return false;
+		}
+
+		var cursor = binHeads[binIndex];
+		while (cursor >= 0) {
+			if (cursor == offset) {
+				return true;
+			}
+
+			var hdr = ReadHeader(cursor);
+			cursor = hdr.NextOffset;
+		}
+
+		return false;
 	}
 
 	~SegmentedArenaSegment() => Dispose(false);
