@@ -1,6 +1,7 @@
 namespace LookBusy.Test;
 
 using System;
+using System.Runtime.CompilerServices;
 using LookBusy;
 using Xunit;
 
@@ -116,5 +117,36 @@ public sealed class SegmentedStringPoolLifecycleTests
 		// Should not have grown beyond what was reserved (4 cells/slab means 10 allocs = ≤3 slabs extra).
 		Assert.True(pool.SlabCount <= slabsAfterReserve + 3,
 			$"More slabs than expected: {pool.SlabCount} vs reserved {slabsAfterReserve}");
+	}
+
+	// P1-7: TotalBytesManaged must account for slot-entry array + slab bitmap arrays
+
+	[Fact]
+	public void TotalBytesManaged_AtLeastCoversSlotArray()
+	{
+		using var pool = new SegmentedStringPool(new(InitialSlotCapacity: 64));
+		var slotEntrySize = Unsafe.SizeOf<SegmentedSlotEntry>();
+		Assert.True(pool.TotalBytesManaged >= 64L * slotEntrySize,
+			$"TotalBytesManaged={pool.TotalBytesManaged} should be >= {64L * slotEntrySize}");
+	}
+
+	[Fact]
+	public void TotalBytesManaged_GrowsWhenSlabsAdded()
+	{
+		using var pool = new SegmentedStringPool();
+		var before = pool.TotalBytesManaged;
+		pool.ReserveSmall(10_000);
+		Assert.True(pool.TotalBytesManaged > before,
+			$"Expected TotalBytesManaged to grow after ReserveSmall; before={before} after={pool.TotalBytesManaged}");
+	}
+
+	[Fact]
+	public void TotalBytesManaged_ReflectsCorrectSlotEntrySize()
+	{
+		// Each SegmentedSlotEntry is 32 bytes (8 ptr + 8 obj ref + 4 + 4 + 4 + 4 pad).
+		// A fresh pool with 64-slot capacity must report >= 64 * 32 = 2048 bytes.
+		using var pool = new SegmentedStringPool(new(InitialSlotCapacity: 64));
+		Assert.True(pool.TotalBytesManaged >= 2048L,
+			$"TotalBytesManaged={pool.TotalBytesManaged}, expected >= 2048");
 	}
 }

@@ -39,6 +39,8 @@ internal sealed class SegmentedSlab : IDisposable
 	// ReSharper disable once MemberCanBePrivate.Global
 	public int FreeCells { get; private set; }
 
+	internal int BitmapWords => bitmap.Length;
+
 	public bool IsFull => FreeCells == 0;
 
 	public SegmentedSlab? NextInClass { get; set; }

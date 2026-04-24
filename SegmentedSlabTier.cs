@@ -39,6 +39,19 @@ internal sealed class SegmentedSlabTier : IDisposable
 
 	public int SlabCount => allSlabs.Count;
 
+	internal long ManagedBitmapBytes
+	{
+		get
+		{
+			long total = 0;
+			foreach (var s in allSlabs) {
+				total += (long)s.BitmapWords * sizeof(ulong);
+			}
+
+			return total;
+		}
+	}
+
 	public long UnmanagedBytes
 	{
 		get
