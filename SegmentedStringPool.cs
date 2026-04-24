@@ -20,6 +20,7 @@ internal static class SegmentedConstants
 	public const int DefaultSlabCellsPerSlab = 256;
 	public const int DefaultArenaSegmentBytes = 1 << 20; // 1 MB: amortises Marshal.AllocHGlobal overhead over many large strings
 	public const int DefaultSmallStringThresholdChars = 128; // strings ≤ threshold go to slab tier; above go to arena tier
+	public const int MaxSlabSizeClassChars = 128; // largest slab size class; threshold above this has no valid class
 }
 
 public sealed record SegmentedStringPoolOptions(
@@ -52,6 +53,10 @@ public sealed class SegmentedStringPool : IDisposable
 	public SegmentedStringPool(SegmentedStringPoolOptions options)
 	{
 		ArgumentNullException.ThrowIfNull(options);
+		ArgumentOutOfRangeException.ThrowIfGreaterThan(
+			options.SmallStringThresholdChars,
+			SegmentedConstants.MaxSlabSizeClassChars,
+			nameof(options));
 		slots = new(options.InitialSlotCapacity);
 		slabTier = new(options.SlabCellsPerSlab);
 		arenaTier = new(options.ArenaSegmentBytes);

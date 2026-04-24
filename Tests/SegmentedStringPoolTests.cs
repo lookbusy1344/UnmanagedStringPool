@@ -130,6 +130,22 @@ public sealed class SegmentedStringPoolTests : IDisposable
 		Assert.Equal(5, pool.GetLength(r.SlotIndex, r.Generation));
 	}
 
+	// P2-9: ctor must reject SmallStringThresholdChars > 128
+	[Fact]
+	public void Constructor_ThresholdAboveMaxSlabClass_Throws()
+	{
+		var opts = new SegmentedStringPoolOptions(SmallStringThresholdChars: 129);
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() => new SegmentedStringPool(opts));
+	}
+
+	[Fact]
+	public void Constructor_ThresholdAtMaxSlabClass_DoesNotThrow()
+	{
+		var opts = new SegmentedStringPoolOptions(SmallStringThresholdChars: 128);
+		using var p = new SegmentedStringPool(opts);
+		Assert.Equal(0, p.ActiveAllocations);
+	}
+
 	// P0-1: options constructor must be public
 	[Fact]
 	public void Constructor_WithOptions_SmallThresholdRoutesToArena()
