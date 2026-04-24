@@ -32,17 +32,7 @@ internal sealed class SegmentedSlab : IDisposable
 		Buffer = Marshal.AllocHGlobal(cellBytes * cellCount);
 		var words = (cellCount + 63) / 64;
 		bitmap = new ulong[words];
-		// Convention: 1=free, 0=used. Start fully free.
-		for (var w = 0; w < words; ++w) {
-			bitmap[w] = ulong.MaxValue;
-		}
-
-		// Phantom bits past CellCount in the last word must be cleared so tzcnt never picks a non-existent cell.
-		var excess = (words * 64) - cellCount;
-		if (excess > 0) {
-			bitmap[^1] &= (1UL << (64 - excess)) - 1UL;
-		}
-
+		FillBitmapAllFree();
 		FreeCells = cellCount;
 	}
 
@@ -119,6 +109,14 @@ internal sealed class SegmentedSlab : IDisposable
 	/// </summary>
 	public void ResetAllCellsFree()
 	{
+		FillBitmapAllFree();
+		FreeCells = cellCount;
+	}
+
+	// Sets all bitmap words to fully-free (1=free) then masks off phantom bits in the
+	// last word so tzcnt never returns an index beyond cellCount.
+	private void FillBitmapAllFree()
+	{
 		for (var w = 0; w < bitmap.Length; ++w) {
 			bitmap[w] = ulong.MaxValue;
 		}
@@ -127,8 +125,6 @@ internal sealed class SegmentedSlab : IDisposable
 		if (excess > 0) {
 			bitmap[^1] &= (1UL << (64 - excess)) - 1UL;
 		}
-
-		FreeCells = cellCount;
 	}
 
 	public long UnmanagedBytes => (long)cellBytes * cellCount;
