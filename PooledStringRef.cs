@@ -194,11 +194,7 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 	public bool Equals(PooledStringRef other) =>
 		AsSpan().SequenceEqual(other.AsSpan());
 
-	public override bool Equals(object? obj) => obj switch {
-		PooledStringRef r => Equals(r),
-		string s => AsSpan().SequenceEqual(s.AsSpan()),
-		_ => false,
-	};
+	public override bool Equals(object? obj) => obj is PooledStringRef r && Equals(r);
 
 	// Intentionally samples only the first and last 8 chars plus the length to keep hashing O(1) for large strings.
 	// This is a speed/distribution tradeoff: hash quality degrades for strings that differ only in the middle,

@@ -362,11 +362,24 @@ public sealed class PooledStringRefEqualityTests : IDisposable
 	}
 
 	[Fact]
-	public void Equals_Object_CompatibleWithString()
+	public void Equals_Object_String_ReturnsFalse()
 	{
+		// Cross-type equality with string violates GetHashCode contract (their hashes diverge),
+		// so Equals(object string) must return false. Use AsSpan().SequenceEqual(s) for content comparison.
 		var a = pool.Allocate("hello");
-		Assert.True(a.Equals((object)"hello"));
+		Assert.False(a.Equals((object)"hello"));
 		Assert.False(a.Equals((object)"HELLO"));
+	}
+
+	[Fact]
+	public void GetHashCode_Contract_EqualObjectsHaveEqualHashes()
+	{
+		// Dictionary<object, T> keyed on both PooledStringRef and string must obey the contract:
+		// if Equals returns false, hash codes are irrelevant; this test confirms equal refs hash equally.
+		var a = pool.Allocate("hello");
+		var b = pool.Allocate("hello");
+		Assert.True(a.Equals(b));
+		Assert.Equal(a.GetHashCode(), b.GetHashCode());
 	}
 
 	[Fact]
