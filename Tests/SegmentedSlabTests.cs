@@ -77,4 +77,39 @@ public sealed class SegmentedSlabTests : IDisposable
 			Assert.Equal(i, slab.CellIndexFromOffset(slab.OffsetOfCell(i)));
 		}
 	}
+
+	// P2-2: disposal guards
+
+	[Fact]
+	public void TryAllocateCell_AfterDispose_Throws()
+	{
+		var s = new SegmentedSlab(0, 16, 4);
+		s.Dispose();
+		_ = Assert.Throws<ObjectDisposedException>(() => s.TryAllocateCell(out _));
+	}
+
+	[Fact]
+	public void FreeCell_AfterDispose_Throws()
+	{
+		var s = new SegmentedSlab(0, 16, 4);
+		_ = s.TryAllocateCell(out var idx);
+		s.Dispose();
+		_ = Assert.Throws<ObjectDisposedException>(() => s.FreeCell(idx));
+	}
+
+	[Fact]
+	public void Contains_AfterDispose_Throws()
+	{
+		var s = new SegmentedSlab(0, 16, 4);
+		s.Dispose();
+		_ = Assert.Throws<ObjectDisposedException>(() => s.Contains(IntPtr.Zero));
+	}
+
+	[Fact]
+	public void ResetAllCellsFree_AfterDispose_Throws()
+	{
+		var s = new SegmentedSlab(0, 16, 4);
+		s.Dispose();
+		_ = Assert.Throws<ObjectDisposedException>(() => s.ResetAllCellsFree());
+	}
 }

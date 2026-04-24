@@ -64,6 +64,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public bool Contains(IntPtr ptr)
 	{
+		ObjectDisposedException.ThrowIf(disposed, this);
 		var raw = ptr.ToInt64();
 		var start = Buffer.ToInt64();
 		return raw >= start && raw < start + Capacity;
@@ -82,6 +83,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	/// </summary>
 	public bool TryAllocate(int byteCount, out IntPtr ptr, out int actualBytes)
 	{
+		ObjectDisposedException.ThrowIf(disposed, this);
 		var size = AlignSize(byteCount);
 		var startBin = BinIndexForSize(size);
 		for (var b = startBin; b < SegmentedConstants.ArenaBinCount; ++b) {
@@ -132,6 +134,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	/// </summary>
 	public void Free(IntPtr ptr, int byteCount)
 	{
+		ObjectDisposedException.ThrowIf(disposed, this);
 		var offset = (int)(ptr.ToInt64() - Buffer.ToInt64());
 		var size = AlignSize(byteCount);
 		TryCoalesceForward(ref offset, ref size);

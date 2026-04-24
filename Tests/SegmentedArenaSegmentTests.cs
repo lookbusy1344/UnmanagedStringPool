@@ -87,6 +87,33 @@ public sealed class SegmentedArenaSegmentTests : IDisposable
 		Assert.True(segment.Contains(ptr));
 	}
 
+	// P2-2: disposal guards
+
+	[Fact]
+	public void TryAllocate_AfterDispose_Throws()
+	{
+		var s = new SegmentedArenaSegment(64);
+		s.Dispose();
+		_ = Assert.Throws<ObjectDisposedException>(() => s.TryAllocate(16, out _, out _));
+	}
+
+	[Fact]
+	public void Free_AfterDispose_Throws()
+	{
+		var s = new SegmentedArenaSegment(64);
+		_ = s.TryAllocate(16, out var ptr, out _);
+		s.Dispose();
+		_ = Assert.Throws<ObjectDisposedException>(() => s.Free(ptr, 16));
+	}
+
+	[Fact]
+	public void ArenaContains_AfterDispose_Throws()
+	{
+		var s = new SegmentedArenaSegment(64);
+		s.Dispose();
+		_ = Assert.Throws<ObjectDisposedException>(() => s.Contains(IntPtr.Zero));
+	}
+
 	// P1-2: boundary-tag coalescing — these tests verify O(1) coalescing via footer reads.
 
 	[Fact]

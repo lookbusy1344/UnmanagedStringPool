@@ -49,6 +49,7 @@ internal sealed class SegmentedSlab : IDisposable
 	/// </summary>
 	public bool TryAllocateCell(out int cellIndex)
 	{
+		ObjectDisposedException.ThrowIf(disposed, this);
 		for (var w = 0; w < bitmap.Length; ++w) {
 			var word = bitmap[w];
 			if (word == 0UL) {
@@ -74,6 +75,7 @@ internal sealed class SegmentedSlab : IDisposable
 	/// <summary>Marks a cell free by setting its bitmap bit. Throws if the cell is already free (double-free guard).</summary>
 	public void FreeCell(int cellIndex)
 	{
+		ObjectDisposedException.ThrowIf(disposed, this);
 		if ((uint)cellIndex >= (uint)cellCount) {
 			throw new ArgumentOutOfRangeException(nameof(cellIndex));
 		}
@@ -97,6 +99,7 @@ internal sealed class SegmentedSlab : IDisposable
 
 	public bool Contains(IntPtr ptr)
 	{
+		ObjectDisposedException.ThrowIf(disposed, this);
 		var raw = ptr.ToInt64();
 		var start = Buffer.ToInt64();
 		var end = start + ((long)cellBytes * cellCount);
@@ -109,6 +112,7 @@ internal sealed class SegmentedSlab : IDisposable
 	/// </summary>
 	public void ResetAllCellsFree()
 	{
+		ObjectDisposedException.ThrowIf(disposed, this);
 		FillBitmapAllFree();
 		FreeCells = cellCount;
 	}
