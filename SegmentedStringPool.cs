@@ -82,7 +82,7 @@ public sealed class SegmentedStringPool : IDisposable
 		}
 
 		var length = value.Length;
-		var ptr = AllocateUnmanaged(length, out var tier);
+		var ptr = AllocateUnmanaged(length, out var tier, out var owner, out var allocatedBytes);
 		unsafe {
 			fixed (char* src = value) {
 				Buffer.MemoryCopy(src, (void*)ptr, length * sizeof(char), length * sizeof(char));
@@ -91,7 +91,7 @@ public sealed class SegmentedStringPool : IDisposable
 
 		// bit 0 of the raw pointer is guaranteed zero by 8-byte alignment, so OR-ing the tier tag is safe
 		var taggedPtr = new IntPtr((ptr.ToInt64() & SegmentedConstants.PtrMask) | (uint)tier);
-		var (slotIndex, gen) = slots.Allocate(taggedPtr, length);
+		var (slotIndex, gen) = slots.Allocate(taggedPtr, length, owner, allocatedBytes);
 		return new(this, slotIndex, gen);
 	}
 
@@ -136,11 +136,9 @@ public sealed class SegmentedStringPool : IDisposable
 		var raw = new IntPtr(entry.Ptr.ToInt64() & SegmentedConstants.PtrMask);
 		var tier = (int)(entry.Ptr.ToInt64() & SegmentedConstants.TierTagMask);
 		if (tier == SegmentedConstants.TierSlab) {
-			var slab = slabTier.LocateSlabByPointer(raw);
-			slabTier.Free(raw, slab);
+			slabTier.Free(raw, (SegmentedSlab)entry.Owner!);
 		} else {
-			var seg = arenaTier.LocateSegmentByPointer(raw);
-			SegmentedArenaTier.Free(raw, entry.LengthChars * sizeof(char), seg);
+			SegmentedArenaTier.Free(raw, entry.AllocatedBytes, (SegmentedArenaSegment)entry.Owner!);
 		}
 
 		_ = slots.Free(slotIndex, generation);
@@ -201,16 +199,21 @@ public sealed class SegmentedStringPool : IDisposable
 	/// and returns the raw unmanaged pointer together with the tier tag to be embedded in the slot.
 	/// </summary>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	private IntPtr AllocateUnmanaged(int charCount, out int tier)
+	private IntPtr AllocateUnmanaged(int charCount, out int tier, out object owner, out int allocatedBytes)
 	{
 		if (charCount <= smallThreshold) {
 			tier = SegmentedConstants.TierSlab;
-			return slabTier.Allocate(charCount, out _);
+			var ptr = slabTier.Allocate(charCount, out var slab);
+			owner = slab;
+			allocatedBytes = 0; // slab free uses cell-index arithmetic; byte count is not needed
+			return ptr;
 		}
 
 		tier = SegmentedConstants.TierArena;
 		var byteCount = charCount * sizeof(char);
-		return arenaTier.Allocate(byteCount, out _);
+		var arenaPtr = arenaTier.Allocate(byteCount, out var segment, out allocatedBytes);
+		owner = segment;
+		return arenaPtr;
 	}
 
 	~SegmentedStringPool() => Dispose(false);

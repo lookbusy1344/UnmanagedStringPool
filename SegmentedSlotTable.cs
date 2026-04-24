@@ -28,7 +28,7 @@ internal sealed class SegmentedSlotTable
 	/// Pops a slot from the free chain if one is available, otherwise advances <see cref="highWater"/>,
 	/// growing the backing array by doubling if needed. Returns the index and the new generation.
 	/// </summary>
-	public (uint SlotIndex, uint Generation) Allocate(IntPtr ptr, int lengthChars)
+	public (uint SlotIndex, uint Generation) Allocate(IntPtr ptr, int lengthChars, object owner, int allocatedBytes)
 	{
 		uint slotIndex;
 		if (freeHead != SegmentedConstants.NoFreeSlot) {
@@ -49,6 +49,8 @@ internal sealed class SegmentedSlotTable
 		var newGen = SegmentedSlotEntry.ClearFreeAndBumpGen(slot.Generation);
 		slot.Ptr = ptr;
 		slot.LengthChars = lengthChars;
+		slot.Owner = owner;
+		slot.AllocatedBytes = allocatedBytes;
 		slot.Generation = newGen;
 		++ActiveCount;
 		return (slotIndex, newGen);
@@ -78,6 +80,8 @@ internal sealed class SegmentedSlotTable
 		// Repurpose Ptr to store the next-free-slot index; the real pointer is no longer needed.
 		slot.Ptr = new(freeHead);
 		slot.LengthChars = 0;
+		slot.Owner = null;       // release the slab/segment reference so it is not rooted here
+		slot.AllocatedBytes = 0;
 		slot.Generation = bumped;
 		freeHead = slotIndex;
 		--ActiveCount;
@@ -123,6 +127,8 @@ internal sealed class SegmentedSlotTable
 			var nextIndex = i + 1 < highWater ? i + 1 : (long)SegmentedConstants.NoFreeSlot;
 			slot.Ptr = new(nextIndex);
 			slot.LengthChars = 0;
+			slot.Owner = null;
+			slot.AllocatedBytes = 0;
 		}
 
 		freeHead = highWater == 0 ? SegmentedConstants.NoFreeSlot : 0u;

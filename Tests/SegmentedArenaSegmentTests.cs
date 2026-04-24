@@ -24,53 +24,66 @@ public sealed class SegmentedArenaSegmentTests : IDisposable
 	[Fact]
 	public void TryAllocate_FromEmpty_UsesBump()
 	{
-		var ok = segment.TryAllocate(byteCount: 128, out var ptr);
+		var ok = segment.TryAllocate(byteCount: 128, out var ptr, out var actualBytes);
 		Assert.True(ok);
 		Assert.Equal(segment.Buffer, ptr);
 		Assert.Equal(128, segment.BumpOffset);
+		Assert.Equal(128, actualBytes);
 	}
 
 	[Fact]
 	public void TryAllocate_BeyondCapacity_ReturnsFalse()
 	{
-		Assert.False(segment.TryAllocate(byteCount: 8192, out _));
+		Assert.False(segment.TryAllocate(byteCount: 8192, out _, out _));
 	}
 
 	[Fact]
 	public void Free_AlignedSize_ReturnsBlockToBin()
 	{
-		_ = segment.TryAllocate(256, out var ptr);
+		_ = segment.TryAllocate(256, out var ptr, out _);
 		segment.Free(ptr, 256);
-		Assert.True(segment.TryAllocate(200, out var reused));
+		Assert.True(segment.TryAllocate(200, out var reused, out _));
 		Assert.Equal(ptr, reused);
 	}
 
 	[Fact]
 	public void Free_AdjacentBlocks_CoalesceOnFree()
 	{
-		_ = segment.TryAllocate(256, out var a);
-		_ = segment.TryAllocate(256, out var b);
+		_ = segment.TryAllocate(256, out var a, out _);
+		_ = segment.TryAllocate(256, out var b, out _);
 		segment.Free(a, 256);
 		segment.Free(b, 256);
-		Assert.True(segment.TryAllocate(512, out var merged));
+		Assert.True(segment.TryAllocate(512, out var merged, out _));
 		Assert.Equal(a, merged);
 	}
 
 	[Fact]
 	public void TryAllocate_SplitsLargeFreeBlock()
 	{
-		_ = segment.TryAllocate(1024, out var ptr);
+		_ = segment.TryAllocate(1024, out var ptr, out _);
 		segment.Free(ptr, 1024);
-		_ = segment.TryAllocate(256, out var first);
+		_ = segment.TryAllocate(256, out var first, out var firstActual);
 		Assert.Equal(ptr, first);
-		_ = segment.TryAllocate(256, out var second);
+		Assert.Equal(256, firstActual); // split path: actualBytes == requested aligned size
+		_ = segment.TryAllocate(256, out var second, out _);
 		Assert.Equal(new IntPtr(ptr.ToInt64() + 256), second);
+	}
+
+	[Fact]
+	public void TryAllocate_NoSplit_ActualBytesIsFullBlockSize()
+	{
+		// Create a 24-byte free block, then request 16 bytes.
+		// Remainder = 8 < MinArenaBlockBytes (16) → no split; full 24 bytes handed out.
+		_ = segment.TryAllocate(24, out var ptr, out _);
+		segment.Free(ptr, 24);
+		_ = segment.TryAllocate(16, out _, out var actual);
+		Assert.Equal(24, actual); // must report the full block, not just the aligned request
 	}
 
 	[Fact]
 	public void Contains_PointerInsideBuffer_ReturnsTrue()
 	{
-		_ = segment.TryAllocate(128, out var ptr);
+		_ = segment.TryAllocate(128, out var ptr, out _);
 		Assert.True(segment.Contains(ptr));
 	}
 }

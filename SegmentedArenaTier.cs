@@ -39,22 +39,28 @@ internal sealed class SegmentedArenaTier : IDisposable
 	/// Allocates <paramref name="byteCount"/> bytes from the first segment that can satisfy the request.
 	/// If no existing segment has room, a new one is appended. New segments are sized as
 	/// <c>max(defaultSegmentBytes, byteCount)</c> so a single oversized string gets its own dedicated segment.
+	/// <para>
+	/// <paramref name="allocatedBytes"/> receives the true bytes handed out (see
+	/// <see cref="SegmentedArenaSegment.TryAllocate"/>). The caller must store this value and supply it
+	/// when freeing so no-split slack is not orphaned.
+	/// </para>
 	/// </summary>
-	public IntPtr Allocate(int byteCount, out SegmentedArenaSegment owningSegment)
+	public IntPtr Allocate(int byteCount, out SegmentedArenaSegment owningSegment, out int allocatedBytes)
 	{
 		foreach (var s in segments) {
-			if (!s.TryAllocate(byteCount, out var ptr)) {
+			if (!s.TryAllocate(byteCount, out var ptr, out var actual)) {
 				continue;
 			}
 
 			owningSegment = s;
+			allocatedBytes = actual;
 			return ptr;
 		}
 
 		var capacity = Math.Max(defaultSegmentBytes, byteCount);
 		var segment = new SegmentedArenaSegment(capacity);
 		segments.Add(segment);
-		_ = segment.TryAllocate(byteCount, out var newPtr);
+		_ = segment.TryAllocate(byteCount, out var newPtr, out allocatedBytes);
 		owningSegment = segment;
 		return newPtr;
 	}

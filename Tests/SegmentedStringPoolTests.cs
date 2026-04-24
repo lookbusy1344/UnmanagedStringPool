@@ -172,4 +172,38 @@ public sealed class SegmentedStringPoolTests : IDisposable
 		Assert.True(customPool.SlabCount >= 1);
 		Assert.Equal(0, customPool.SegmentCount);
 	}
+
+	// P0-2: arena free-list no-split slack recovery
+	[Fact]
+	public void Arena_NoSplit_SlackBytesRecoveredOnFree()
+	{
+		// Reproduce the no-split slack-loss scenario:
+		//   1. Alloc 12 chars (24 B) from bump   → BumpOffset = 24
+		//   2. Alloc  8 chars (16 B) from bump   → BumpOffset = 40
+		//      Remaining bump = 8 B < MinArenaBlockBytes (16): effectively full.
+		//   3. Free r1 → 24-byte free block in bin.
+		//   4. Alloc 8 chars (16 B aligned) from free list: remainder 24−16=8 < 16 → no-split,
+		//      full 24-byte block handed out.
+		//   Before fix: Free records 16 B, orphaning 8 B. Next 24-byte alloc can't fit → new segment.
+		//   After fix:  Free records 24 B (AllocatedBytes). 24-byte block recovered. No new segment.
+		const int segmentBytes = 48;
+		var opts = new SegmentedStringPoolOptions(
+			ArenaSegmentBytes: segmentBytes,
+			SmallStringThresholdChars: 0); // force all strings to arena
+		using var pool = new SegmentedStringPool(opts);
+
+		var r1 = pool.Allocate(new string('a', 12)); // 24 B from bump
+		var r2 = pool.Allocate(new string('b', 8));  // 16 B from bump; bump now at 40
+		r1.Free();                                    // 24-B free block at offset 0
+
+		var r3 = pool.Allocate(new string('c', 8));  // 16 B from free list — no-split, gets 24 B
+		r3.Free();                                    // must return the full 24 B back
+
+		var r4 = pool.Allocate(new string('d', 12)); // 24 B — must come from the recovered free block
+		Assert.False(r4.IsEmpty);
+		Assert.Equal(1, pool.SegmentCount);           // no new segment should have been created
+
+		r2.Free();
+		r4.Free();
+	}
 }

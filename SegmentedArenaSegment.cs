@@ -60,8 +60,14 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	/// Attempts to allocate <paramref name="byteCount"/> bytes from this segment. Searches free-list bins from the
 	/// smallest sufficient bin upward, splitting any oversized block. Falls back to bump allocation if no free block fits.
 	/// Returns false if neither strategy can satisfy the request.
+	/// <para>
+	/// <paramref name="actualBytes"/> receives the true number of bytes handed out. This equals the aligned
+	/// request size in the split and bump cases, but equals the full free-block size when the remainder after
+	/// a split would be smaller than <see cref="SegmentedConstants.MinArenaBlockBytes"/> (no-split path).
+	/// The caller must store this value and pass it back to <see cref="Free"/> to avoid orphaning the slack.
+	/// </para>
 	/// </summary>
-	public bool TryAllocate(int byteCount, out IntPtr ptr)
+	public bool TryAllocate(int byteCount, out IntPtr ptr, out int actualBytes)
 	{
 		var size = AlignSize(byteCount);
 		var startBin = BinIndexForSize(size);
@@ -78,6 +84,12 @@ internal sealed class SegmentedArenaSegment : IDisposable
 						WriteHeader(tailOffset,
 							new() { SizeBytes = remainder, NextOffset = -1, PrevOffset = -1, BinIndex = BinIndexForSize(remainder) });
 						LinkIntoBin(tailOffset);
+						actualBytes = size;
+					} else {
+						// No-split: hand out the entire block. The remainder (< MinArenaBlockBytes)
+						// is absorbed into the allocation; record the full block size so Free can
+						// reclaim it correctly rather than orphaning the slack bytes.
+						actualBytes = hdr.SizeBytes;
 					}
 
 					ptr = new(Buffer.ToInt64() + head);
@@ -92,10 +104,12 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		if (BumpOffset + size <= Capacity) {
 			ptr = new(Buffer.ToInt64() + BumpOffset);
 			BumpOffset += size;
+			actualBytes = size;
 			return true;
 		}
 
 		ptr = IntPtr.Zero;
+		actualBytes = 0;
 		return false;
 	}
 

@@ -17,7 +17,7 @@ public sealed class SegmentedArenaTierTests : IDisposable
 	[Fact]
 	public void Allocate_First_UsesInitialSegment()
 	{
-		var ptr = tier.Allocate(byteCount: 512, out var segment);
+		var ptr = tier.Allocate(byteCount: 512, out var segment, out _);
 		Assert.NotEqual(IntPtr.Zero, ptr);
 		Assert.NotNull(segment);
 		Assert.Equal(1, tier.SegmentCount);
@@ -27,7 +27,7 @@ public sealed class SegmentedArenaTierTests : IDisposable
 	public void Allocate_BeyondSegmentCapacity_AddsNewSegment()
 	{
 		for (var i = 0; i < 10; ++i) {
-			_ = tier.Allocate(1024, out _);
+			_ = tier.Allocate(1024, out _, out _);
 		}
 		Assert.True(tier.SegmentCount >= 2);
 	}
@@ -35,7 +35,7 @@ public sealed class SegmentedArenaTierTests : IDisposable
 	[Fact]
 	public void Allocate_LargerThanSegmentSize_CreatesOversizeSegment()
 	{
-		_ = tier.Allocate(8192, out var seg);
+		_ = tier.Allocate(8192, out var seg, out _);
 		Assert.NotNull(seg);
 		Assert.True(seg.Capacity >= 8192);
 	}
@@ -43,17 +43,17 @@ public sealed class SegmentedArenaTierTests : IDisposable
 	[Fact]
 	public void Free_ReturnsBlockToOwningSegment()
 	{
-		var ptr = tier.Allocate(1024, out var seg);
-		SegmentedArenaTier.Free(ptr, 1024, seg);
-		_ = tier.Allocate(1024, out _);
+		var ptr = tier.Allocate(1024, out var seg, out var actual);
+		SegmentedArenaTier.Free(ptr, actual, seg);
+		_ = tier.Allocate(1024, out _, out _);
 		Assert.True(seg.BumpOffset <= 2048);
 	}
 
 	[Fact]
 	public void LocateSegmentByPointer_FindsOwner()
 	{
-		var ptr1 = tier.Allocate(1024, out var s1);
-		for (var i = 0; i < 10; ++i) { _ = tier.Allocate(1024, out _); }
+		var ptr1 = tier.Allocate(1024, out var s1, out _);
+		for (var i = 0; i < 10; ++i) { _ = tier.Allocate(1024, out _, out _); }
 		var found = tier.LocateSegmentByPointer(ptr1);
 		Assert.Same(s1, found);
 	}
