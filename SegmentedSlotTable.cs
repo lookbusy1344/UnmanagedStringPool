@@ -113,7 +113,7 @@ internal sealed class SegmentedSlotTable
 	/// </summary>
 	public void ClearAllSlots()
 	{
-		for (var i = 0; i < highWater; i++) {
+		for (var i = 0; i < highWater; ++i) {
 			ref var slot = ref slots[i];
 			if (!SegmentedSlotEntry.IsFree(slot.Generation)) {
 				slot.Generation = SegmentedSlotEntry.MarkFreeAndBumpGen(slot.Generation);

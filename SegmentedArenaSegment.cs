@@ -41,7 +41,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		ArgumentOutOfRangeException.ThrowIfLessThan(capacity, SegmentedConstants.MinArenaBlockBytes);
 		Capacity = capacity;
 		Buffer = Marshal.AllocHGlobal(capacity);
-		for (var i = 0; i < SegmentedConstants.ArenaBinCount; i++) {
+		for (var i = 0; i < SegmentedConstants.ArenaBinCount; ++i) {
 			binHeads[i] = -1;
 		}
 	}
@@ -67,7 +67,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	{
 		var size = AlignSize(byteCount);
 		var startBin = BinIndexForSize(size);
-		for (var b = startBin; b < SegmentedConstants.ArenaBinCount; b++) {
+		for (var b = startBin; b < SegmentedConstants.ArenaBinCount; ++b) {
 			var head = binHeads[b];
 			while (head >= 0) {
 				var hdr = ReadHeader(head);
@@ -122,7 +122,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	public void Reset()
 	{
 		BumpOffset = 0;
-		for (var i = 0; i < SegmentedConstants.ArenaBinCount; i++) {
+		for (var i = 0; i < SegmentedConstants.ArenaBinCount; ++i) {
 			binHeads[i] = -1;
 		}
 	}
@@ -219,7 +219,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 			return;
 		}
 
-		for (var b = 0; b < SegmentedConstants.ArenaBinCount; b++) {
+		for (var b = 0; b < SegmentedConstants.ArenaBinCount; ++b) {
 			var cursor = binHeads[b];
 			while (cursor >= 0) {
 				var hdr = ReadHeader(cursor);
@@ -238,7 +238,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	// Scans all bins looking for a free block whose end address equals our start.
 	private void TryCoalesceBackward(ref int offset, ref int size)
 	{
-		for (var b = 0; b < SegmentedConstants.ArenaBinCount; b++) {
+		for (var b = 0; b < SegmentedConstants.ArenaBinCount; ++b) {
 			var cursor = binHeads[b];
 			while (cursor >= 0) {
 				var hdr = ReadHeader(cursor);

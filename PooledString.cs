@@ -405,7 +405,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 			}
 		} else {
 			// Hash first fragment chars
-			for (var i = 0; i < halfMax; i++) {
+			for (var i = 0; i < halfMax; ++i) {
 				hash.Add(span[i]);
 			}
 

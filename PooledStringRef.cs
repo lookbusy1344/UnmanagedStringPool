@@ -162,7 +162,7 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 
 		var srcCursor = 0;
 		var dstCursor = 0;
-		for (var i = 0; i < matchCount; i++) {
+		for (var i = 0; i < matchCount; ++i) {
 			var matchAt = matches[i];
 			var preLen = matchAt - srcCursor;
 			source.Slice(srcCursor, preLen).CopyTo(buffer.Slice(dstCursor));

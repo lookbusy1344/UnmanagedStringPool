@@ -33,7 +33,7 @@ internal sealed class SegmentedSlab : IDisposable
 		var words = (cellCount + 63) / 64;
 		bitmap = new ulong[words];
 		// Convention: 1=free, 0=used. Start fully free.
-		for (var w = 0; w < words; w++) {
+		for (var w = 0; w < words; ++w) {
 			bitmap[w] = ulong.MaxValue;
 		}
 
@@ -59,7 +59,7 @@ internal sealed class SegmentedSlab : IDisposable
 	/// </summary>
 	public bool TryAllocateCell(out int cellIndex)
 	{
-		for (var w = 0; w < bitmap.Length; w++) {
+		for (var w = 0; w < bitmap.Length; ++w) {
 			var word = bitmap[w];
 			if (word == 0UL) {
 				continue;
@@ -119,7 +119,7 @@ internal sealed class SegmentedSlab : IDisposable
 	/// </summary>
 	public void ResetAllCellsFree()
 	{
-		for (var w = 0; w < bitmap.Length; w++) {
+		for (var w = 0; w < bitmap.Length; ++w) {
 			bitmap[w] = ulong.MaxValue;
 		}
 

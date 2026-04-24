@@ -418,7 +418,7 @@ public sealed class UnmanagedStringPool : IDisposable
 		var index = FindFirstSizeIndex(requiredSize);
 
 		// Check all sizes from the found index onwards
-		for (var i = index; i < freeBlocksBySize.Count; i++) {
+		for (var i = index; i < freeBlocksBySize.Count; ++i) {
 			var blocks = freeBlocksBySize.Values[i];
 			if (blocks.Count > 0) {
 				// Use the last block (best fit strategy)
@@ -536,7 +536,7 @@ public sealed class UnmanagedStringPool : IDisposable
 		totalFreeBytes = 0;
 		var currentBlock = blocks[0];
 
-		for (var i = 1; i < blocks.Length; i++) {
+		for (var i = 1; i < blocks.Length; ++i) {
 			var nextBlock = blocks[i];
 
 			if (currentBlock.OffsetFromBase + currentBlock.SizeBytes == nextBlock.OffsetFromBase) {

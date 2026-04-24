@@ -126,7 +126,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 	/// </summary>
 	public void ResetAll()
 	{
-		for (var i = 0; i < SegmentedConstants.SlabSizeClassCount; i++) {
+		for (var i = 0; i < SegmentedConstants.SlabSizeClassCount; ++i) {
 			activeSlabs[i] = null;
 		}
 
@@ -162,7 +162,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 		}
 
 		allSlabs.Clear();
-		for (var i = 0; i < SegmentedConstants.SlabSizeClassCount; i++) {
+		for (var i = 0; i < SegmentedConstants.SlabSizeClassCount; ++i) {
 			activeSlabs[i] = null;
 		}
 	}
