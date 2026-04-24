@@ -30,7 +30,7 @@ internal sealed class SegmentedSlotTable
 	/// Pops a slot from the free chain if one is available, otherwise advances <see cref="highWater"/>,
 	/// growing the backing array by doubling if needed. Returns the index and the new generation.
 	/// </summary>
-	public (uint SlotIndex, uint Generation) Allocate(IntPtr ptr, int lengthChars, object owner, int allocatedBytes)
+	public (uint SlotIndex, uint Generation) Allocate(IntPtr ptr, int lengthChars, object? owner, int allocatedBytes)
 	{
 		uint slotIndex;
 		if (freeHead != SegmentedConstants.NoFreeSlot) {
