@@ -129,4 +129,31 @@ public sealed class SegmentedStringPoolTests : IDisposable
 		var r = pool.Allocate("hello");
 		Assert.Equal(5, pool.GetLength(r.SlotIndex, r.Generation));
 	}
+
+	// P0-1: options constructor must be public
+	[Fact]
+	public void Constructor_WithOptions_SmallThresholdRoutesToArena()
+	{
+		var opts = new SegmentedStringPoolOptions(SmallStringThresholdChars: 4);
+		using var customPool = new SegmentedStringPool(opts);
+
+		// 5-char string exceeds the threshold of 4 → must go to arena
+		_ = customPool.Allocate("hello");
+
+		Assert.Equal(0, customPool.SlabCount);
+		Assert.True(customPool.SegmentCount >= 1);
+	}
+
+	[Fact]
+	public void Constructor_WithOptions_SmallThresholdRoutesToSlab()
+	{
+		var opts = new SegmentedStringPoolOptions(SmallStringThresholdChars: 4);
+		using var customPool = new SegmentedStringPool(opts);
+
+		// 4-char string is at the threshold → must go to slab
+		_ = customPool.Allocate("hi!!");
+
+		Assert.True(customPool.SlabCount >= 1);
+		Assert.Equal(0, customPool.SegmentCount);
+	}
 }

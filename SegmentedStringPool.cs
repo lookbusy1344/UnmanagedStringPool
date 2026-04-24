@@ -49,7 +49,7 @@ public sealed class SegmentedStringPool : IDisposable
 
 	public SegmentedStringPool() : this(new()) { }
 
-	private SegmentedStringPool(SegmentedStringPoolOptions options)
+	public SegmentedStringPool(SegmentedStringPoolOptions options)
 	{
 		ArgumentNullException.ThrowIfNull(options);
 		slots = new(options.InitialSlotCapacity);
