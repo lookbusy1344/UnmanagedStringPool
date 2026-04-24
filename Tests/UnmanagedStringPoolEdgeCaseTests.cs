@@ -102,7 +102,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 	{
 		using var pool = new UnmanagedStringPool(1024);
 
-		for (var i = 0; i < 1000; i++) {
+		for (var i = 0; i < 1000; ++i) {
 			var empty = pool.Allocate("");
 			Assert.True(empty.IsEmpty);
 		}
@@ -359,7 +359,7 @@ public class UnmanagedStringPoolEdgeCaseTests
 		using var pool = new UnmanagedStringPool(1024);
 
 		var strings = new List<PooledString>();
-		for (var i = 0; i < 10; i++) {
+		for (var i = 0; i < 10; ++i) {
 			strings.Add(pool.Allocate($"String{i}"));
 		}
 

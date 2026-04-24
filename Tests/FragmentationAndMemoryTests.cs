@@ -26,7 +26,7 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 		var strings = new List<PooledString>();
 
 		// Allocate a series of strings
-		for (var i = 0; i < 10; i++) {
+		for (var i = 0; i < 10; ++i) {
 			strings.Add(pool.Allocate($"String_{i:D2}"));
 		}
 
@@ -49,12 +49,12 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 		var strings = new List<PooledString>();
 
 		// Fill a significant portion of the pool
-		for (var i = 0; i < 20; i++) {
+		for (var i = 0; i < 20; ++i) {
 			strings.Add(pool.Allocate($"FragmentationTest_{i:D3}"));
 		}
 
 		// Free all but the first and last to maximize fragmentation
-		for (var i = 1; i < strings.Count - 1; i++) {
+		for (var i = 1; i < strings.Count - 1; ++i) {
 			strings[i].Free();
 		}
 
@@ -71,7 +71,7 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 		var strings = new List<PooledString>();
 
 		// Create fragmentation
-		for (var i = 0; i < 15; i++) {
+		for (var i = 0; i < 15; ++i) {
 			strings.Add(pool.Allocate($"Test_{i}"));
 		}
 
@@ -183,7 +183,7 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 		str2.Free();
 
 		// Force coalescing by adding many free operations or defragmenting
-		for (var i = 0; i < 15; i++) {
+		for (var i = 0; i < 15; ++i) {
 			var temp = pool.Allocate("temp");
 			temp.Free();
 		}
@@ -217,7 +217,7 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 		var strings = new List<PooledString>();
 
 		// Create significant fragmentation
-		for (var i = 0; i < 30; i++) {
+		for (var i = 0; i < 30; ++i) {
 			strings.Add(pool.Allocate($"String_{i:D2}"));
 		}
 
@@ -249,7 +249,7 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 	{
 		// Create fragmentation
 		var strings = new List<PooledString>();
-		for (var i = 0; i < 25; i++) {
+		for (var i = 0; i < 25; ++i) {
 			strings.Add(pool.Allocate($"FragTest_{i}"));
 		}
 
@@ -306,7 +306,7 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 		}
 
 		// Verify all strings are correctly stored
-		for (var i = 0; i < sizes.Length; i++) {
+		for (var i = 0; i < sizes.Length; ++i) {
 			var expected = new string('X', sizes[i]);
 			Assert.Equal(expected, strings[i].ToString());
 		}
@@ -319,7 +319,7 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 		var strings = new List<PooledString>();
 
 		// Make many small allocations
-		for (var i = 0; i < 100; i++) {
+		for (var i = 0; i < 100; ++i) {
 			strings.Add(pool.Allocate("X"));
 		}
 
@@ -346,7 +346,7 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 		var activeStrings = new List<(PooledString str, string content)>();
 		var random = new Random(12345); // Fixed seed
 
-		for (var iteration = 0; iteration < 200; iteration++) {
+		for (var iteration = 0; iteration < 200; ++iteration) {
 			var operation = random.Next(3);
 
 			if (operation == 0 || activeStrings.Count == 0) // Allocate
@@ -387,16 +387,16 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 		const int cycles = 50;
 		const int stringsPerCycle = 20;
 
-		for (var cycle = 0; cycle < cycles; cycle++) {
+		for (var cycle = 0; cycle < cycles; ++cycle) {
 			var strings = new List<PooledString>();
 
 			// Allocate
-			for (var i = 0; i < stringsPerCycle; i++) {
+			for (var i = 0; i < stringsPerCycle; ++i) {
 				strings.Add(pool.Allocate($"Cycle{cycle}_String{i}"));
 			}
 
 			// Verify
-			for (var i = 0; i < stringsPerCycle; i++) {
+			for (var i = 0; i < stringsPerCycle; ++i) {
 				Assert.Equal($"Cycle{cycle}_String{i}", strings[i].ToString());
 			}
 
@@ -443,7 +443,7 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 		var strings = new List<PooledString>();
 
 		// Fill pool significantly
-		for (var i = 0; i < 40; i++) {
+		for (var i = 0; i < 40; ++i) {
 			strings.Add(pool.Allocate($"Boundary_Test_{i:D3}"));
 		}
 
@@ -469,12 +469,12 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 		var strings = new List<PooledString>();
 
 		// Fill a good portion of the pool
-		for (var i = 0; i < 30; i++) {
+		for (var i = 0; i < 30; ++i) {
 			strings.Add(pool.Allocate($"MaxFrag_{i:D2}"));
 		}
 
 		// Free all but one string to create maximum fragmentation scenario
-		for (var i = 1; i < strings.Count; i++) {
+		for (var i = 1; i < strings.Count; ++i) {
 			strings[i].Free();
 		}
 

@@ -251,7 +251,7 @@ public class DisposalAndLifecycleTests
 		using var pool = new UnmanagedStringPool(1024);
 		var empty = pool.CreateEmptyString();
 
-		for (var i = 0; i < 10; i++) {
+		for (var i = 0; i < 10; ++i) {
 			empty.Free();
 			empty.Dispose();
 		}
@@ -290,12 +290,12 @@ public class DisposalAndLifecycleTests
 		var strings = new List<PooledString>();
 
 		// Allocate multiple strings
-		for (var i = 0; i < 10; i++) {
+		for (var i = 0; i < 10; ++i) {
 			strings.Add(pool.Allocate($"String{i}"));
 		}
 
 		// Free some strings individually
-		for (var i = 0; i < 5; i++) {
+		for (var i = 0; i < 5; ++i) {
 			strings[i].Free();
 		}
 
@@ -305,12 +305,12 @@ public class DisposalAndLifecycleTests
 		pool.Dispose();
 
 		// All remaining strings should become invalid
-		for (var i = 5; i < 10; i++) {
+		for (var i = 5; i < 10; ++i) {
 			_ = Assert.Throws<ObjectDisposedException>(() => strings[i].AsSpan());
 		}
 
 		// Already freed strings should remain safely freed
-		for (var i = 0; i < 5; i++) {
+		for (var i = 0; i < 5; ++i) {
 			strings[i].Free(); // Should not throw
 		}
 	}
@@ -439,17 +439,17 @@ public class DisposalAndLifecycleTests
 		using var pool = new UnmanagedStringPool(4096);
 		var random = new Random(42);
 
-		for (var iteration = 0; iteration < 100; iteration++) {
+		for (var iteration = 0; iteration < 100; ++iteration) {
 			var strings = new List<PooledString>();
 			var disposed = new bool[20]; // Track which strings are disposed
 
 			// Allocate many strings
-			for (var i = 0; i < 20; i++) {
+			for (var i = 0; i < 20; ++i) {
 				strings.Add(pool.Allocate($"Iteration{iteration}_String{i}"));
 			}
 
 			// Randomly dispose some
-			for (var i = 0; i < strings.Count; i++) {
+			for (var i = 0; i < strings.Count; ++i) {
 				if (random.Next(2) == 0) {
 					strings[i].Dispose();
 					disposed[i] = true;
@@ -457,7 +457,7 @@ public class DisposalAndLifecycleTests
 			}
 
 			// Verify remaining strings are still valid
-			for (var i = 0; i < strings.Count; i++) {
+			for (var i = 0; i < strings.Count; ++i) {
 				if (!disposed[i]) // Only check the ones we didn't dispose
 				{
 					var content = strings[i].ToString();
@@ -473,12 +473,12 @@ public class DisposalAndLifecycleTests
 	public void StressTest_PoolCreationAndDisposal_NoMemoryLeaks()
 	{
 		// Create and dispose many pools to test for leaks
-		for (var i = 0; i < 100; i++) {
+		for (var i = 0; i < 100; ++i) {
 			using var pool = new UnmanagedStringPool(1024);
 			var strings = new List<PooledString>();
 
 			// Use the pool
-			for (var j = 0; j < 10; j++) {
+			for (var j = 0; j < 10; ++j) {
 				strings.Add(pool.Allocate($"Pool{i}_String{j}"));
 			}
 

@@ -499,10 +499,10 @@ public sealed class PooledStringTests : IDisposable
 		var hashes = new HashSet<int>();
 
 		// Generate random strings of varying lengths
-		for (var i = 0; i < stringCount; i++) {
+		for (var i = 0; i < stringCount; ++i) {
 			var length = random.Next(5, 30);
 			var chars = new char[length];
-			for (var j = 0; j < length; j++) {
+			for (var j = 0; j < length; ++j) {
 				// Generate random printable ASCII characters
 				chars[j] = (char)random.Next(32, 127);
 			}
@@ -564,11 +564,11 @@ public sealed class PooledStringTests : IDisposable
 		var random = new Random(123);
 		const int iterations = 50;
 
-		for (var i = 0; i < iterations; i++) {
+		for (var i = 0; i < iterations; ++i) {
 			// Generate a random string
 			var length = random.Next(0, 100);
 			var chars = new char[length];
-			for (var j = 0; j < length; j++) {
+			for (var j = 0; j < length; ++j) {
 				chars[j] = (char)random.Next(32, 127);
 			}
 
@@ -591,11 +591,11 @@ public sealed class PooledStringTests : IDisposable
 		using var pool2 = new UnmanagedStringPool(1024);
 		var random = new Random(456);
 
-		for (var i = 0; i < 20; i++) {
+		for (var i = 0; i < 20; ++i) {
 			// Generate random string
 			var length = random.Next(5, 50);
 			var chars = new char[length];
-			for (var j = 0; j < length; j++) {
+			for (var j = 0; j < length; ++j) {
 				chars[j] = (char)random.Next(65, 91); // A-Z
 			}
 

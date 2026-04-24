@@ -28,17 +28,17 @@ public sealed class ConcurrentAccessTests : IDisposable
 	{
 		// Allocate some strings first
 		var strings = new PooledString[10];
-		for (var i = 0; i < strings.Length; i++) {
+		for (var i = 0; i < strings.Length; ++i) {
 			strings[i] = pool.Allocate($"ConcurrentRead_{i}");
 		}
 
 		var tasks = new Task[Environment.ProcessorCount];
 		var exceptions = new ConcurrentBag<Exception>();
 
-		for (var t = 0; t < tasks.Length; t++) {
+		for (var t = 0; t < tasks.Length; ++t) {
 			tasks[t] = Task.Run(() => {
 				try {
-					for (var iteration = 0; iteration < 100; iteration++) {
+					for (var iteration = 0; iteration < 100; ++iteration) {
 						foreach (var str in strings) {
 							// These are read operations and should be thread-safe
 							var span = str.AsSpan();
@@ -73,10 +73,10 @@ public sealed class ConcurrentAccessTests : IDisposable
 		var tasks = new Task[Environment.ProcessorCount];
 		var exceptions = new ConcurrentBag<Exception>();
 
-		for (var t = 0; t < tasks.Length; t++) {
+		for (var t = 0; t < tasks.Length; ++t) {
 			tasks[t] = Task.Run(() => {
 				try {
-					for (var i = 0; i < 50; i++) {
+					for (var i = 0; i < 50; ++i) {
 						// Read-only operations should be thread-safe
 						var span = str.SubstringSpan(0, 5);
 						var indexOf = str.IndexOf("World");
@@ -119,11 +119,11 @@ public sealed class ConcurrentAccessTests : IDisposable
 		var allocatedStrings = new ConcurrentBag<PooledString>();
 		var exceptions = new ConcurrentBag<Exception>();
 
-		for (var t = 0; t < tasks.Length; t++) {
+		for (var t = 0; t < tasks.Length; ++t) {
 			var taskId = t;
 			tasks[t] = Task.Run(() => {
 				try {
-					for (var i = 0; i < 10; i++) {
+					for (var i = 0; i < 10; ++i) {
 						// Concurrent allocations without synchronization
 						var str = pool.Allocate($"Task{taskId}_String{i}");
 						allocatedStrings.Add(str);
@@ -153,11 +153,11 @@ public sealed class ConcurrentAccessTests : IDisposable
 		var allocatedStrings = new ConcurrentBag<string>();
 		var exceptions = new ConcurrentBag<Exception>();
 
-		for (var t = 0; t < tasks.Length; t++) {
+		for (var t = 0; t < tasks.Length; ++t) {
 			var taskId = t;
 			tasks[t] = Task.Run(() => {
 				try {
-					for (var i = 0; i < 20; i++) {
+					for (var i = 0; i < 20; ++i) {
 						PooledString str;
 						lock (lockObject) {
 							// Synchronized allocation
@@ -199,7 +199,7 @@ public sealed class ConcurrentAccessTests : IDisposable
 	{
 		// Pre-allocate some strings to have interesting state
 		var baseStrings = new List<PooledString>();
-		for (var i = 0; i < 5; i++) {
+		for (var i = 0; i < 5; ++i) {
 			baseStrings.Add(pool.Allocate($"Base{i}"));
 		}
 
@@ -207,10 +207,10 @@ public sealed class ConcurrentAccessTests : IDisposable
 		var stateReadings = new ConcurrentBag<(int ActiveAllocations, int FreeSpaceChars, double FragmentationPercentage)>();
 		var exceptions = new ConcurrentBag<Exception>();
 
-		for (var t = 0; t < tasks.Length; t++) {
+		for (var t = 0; t < tasks.Length; ++t) {
 			tasks[t] = Task.Run(() => {
 				try {
-					for (var i = 0; i < 50; i++) {
+					for (var i = 0; i < 50; ++i) {
 						// Read pool state (should be thread-safe for reads)
 						var activeAllocations = pool.ActiveAllocations;
 						var freeSpaceChars = pool.FreeSpaceChars;
@@ -251,12 +251,12 @@ public sealed class ConcurrentAccessTests : IDisposable
 		var lockObject = new object();
 		var tasks = new Task<List<string>>[4];
 
-		for (var t = 0; t < tasks.Length; t++) {
+		for (var t = 0; t < tasks.Length; ++t) {
 			var taskId = t;
 			tasks[t] = Task.Run(() => {
 				var results = new List<string>();
 
-				for (var i = 0; i < 15; i++) {
+				for (var i = 0; i < 15; ++i) {
 					string result;
 					lock (lockObject) {
 						var str = pool.Allocate($"ConcurrentTask{taskId}_Item{i}");
@@ -293,7 +293,7 @@ public sealed class ConcurrentAccessTests : IDisposable
 	{
 		// Allocate test strings
 		var testStrings = new PooledString[10];
-		for (var i = 0; i < testStrings.Length; i++) {
+		for (var i = 0; i < testStrings.Length; ++i) {
 			testStrings[i] = pool.Allocate($"ThreadSafeRead_{i}_Content");
 		}
 
@@ -301,10 +301,10 @@ public sealed class ConcurrentAccessTests : IDisposable
 		var readResults = new ConcurrentBag<string>();
 		var exceptions = new ConcurrentBag<Exception>();
 
-		for (var t = 0; t < tasks.Length; t++) {
+		for (var t = 0; t < tasks.Length; ++t) {
 			tasks[t] = Task.Run(() => {
 				try {
-					for (var iteration = 0; iteration < 30; iteration++) {
+					for (var iteration = 0; iteration < 30; ++iteration) {
 						foreach (var str in testStrings) {
 							// Multiple concurrent reads
 							var asString = str.ToString();
@@ -355,7 +355,7 @@ public sealed class ConcurrentAccessTests : IDisposable
 
 		var readTask = Task.Run(() => {
 			try {
-				for (var i = 0; i < 100; i++) {
+				for (var i = 0; i < 100; ++i) {
 					var content = str1.ToString();
 					Assert.Equal("Test String 1", content);
 					Thread.Sleep(1);
@@ -390,9 +390,9 @@ public sealed class ConcurrentAccessTests : IDisposable
 		var tasks = new Task[Environment.ProcessorCount];
 		var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-		for (var t = 0; t < tasks.Length; t++) {
+		for (var t = 0; t < tasks.Length; ++t) {
 			tasks[t] = Task.Run(() => {
-				for (var i = 0; i < 1000; i++) {
+				for (var i = 0; i < 1000; ++i) {
 					var span = str.AsSpan();
 					var length = str.Length;
 					var content = str.ToString();
@@ -426,10 +426,10 @@ public sealed class ConcurrentAccessTests : IDisposable
 		var tasks = new Task[Environment.ProcessorCount];
 		var exceptions = new ConcurrentBag<Exception>();
 
-		for (var t = 0; t < tasks.Length; t++) {
+		for (var t = 0; t < tasks.Length; ++t) {
 			tasks[t] = Task.Run(() => {
 				try {
-					for (var i = 0; i < 200; i++) {
+					for (var i = 0; i < 200; ++i) {
 						var empty = pool.CreateEmptyString();
 
 						// All these operations should be thread-safe on empty strings
@@ -482,15 +482,15 @@ public sealed class ConcurrentAccessTests : IDisposable
 		var poolStrings = new List<PooledString>();
 
 		// Pre-allocate some strings
-		for (var i = 0; i < 5; i++) {
+		for (var i = 0; i < 5; ++i) {
 			poolStrings.Add(pool.Allocate($"Initial{i}"));
 		}
 
-		for (var t = 0; t < tasks.Length; t++) {
+		for (var t = 0; t < tasks.Length; ++t) {
 			var taskId = t;
 			tasks[t] = Task.Run(() => {
 				try {
-					for (var i = 0; i < 20; i++) {
+					for (var i = 0; i < 20; ++i) {
 						if (taskId % 2 == 0) // Reader tasks
 						{
 							rwLock.EnterReadLock();

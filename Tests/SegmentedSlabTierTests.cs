@@ -45,7 +45,7 @@ public sealed class SegmentedSlabTierTests : IDisposable
 	[Fact]
 	public void Allocate_BeyondSlabCapacity_AllocatesSecondSlab()
 	{
-		for (var i = 0; i < 4; i++) {
+		for (var i = 0; i < 4; ++i) {
 			_ = tier.Allocate(5, out _);
 		}
 		_ = tier.Allocate(5, out _);
@@ -64,7 +64,7 @@ public sealed class SegmentedSlabTierTests : IDisposable
 	public void Allocate_FillingSlab_DetachesItFromActiveChain()
 	{
 		SegmentedSlab? slabA = null;
-		for (var i = 0; i < 4; i++) {
+		for (var i = 0; i < 4; ++i) {
 			_ = tier.Allocate(5, out var s);
 			slabA = s;
 		}
@@ -80,7 +80,7 @@ public sealed class SegmentedSlabTierTests : IDisposable
 	public void Free_OnFullSlab_RelinksItToActiveChainHead()
 	{
 		var firstPtr = tier.Allocate(5, out var slabA);
-		for (var i = 1; i < 4; i++) {
+		for (var i = 1; i < 4; ++i) {
 			_ = tier.Allocate(5, out _);
 		}
 		Assert.True(slabA.IsFull);
@@ -104,7 +104,7 @@ public sealed class SegmentedSlabTierTests : IDisposable
 
 		// Slab still has all cells free; allocate 4 more should reuse the same slab,
 		// not silently spawn duplicates from a corrupt chain.
-		for (var i = 0; i < 4; i++) {
+		for (var i = 0; i < 4; ++i) {
 			_ = tier.Allocate(5, out var s);
 			Assert.Same(slabA, s);
 		}
@@ -116,7 +116,7 @@ public sealed class SegmentedSlabTierTests : IDisposable
 	{
 		// Fill slab A so it gets detached.
 		SegmentedSlab? slabA = null;
-		for (var i = 0; i < 4; i++) {
+		for (var i = 0; i < 4; ++i) {
 			_ = tier.Allocate(5, out var s);
 			slabA = s;
 		}
@@ -128,7 +128,7 @@ public sealed class SegmentedSlabTierTests : IDisposable
 		// After reset, every existing slab should be on the chain — fill the head and
 		// confirm we land in the second slab without spawning a third.
 		var slabCountBefore = tier.SlabCount;
-		for (var i = 0; i < 4; i++) {
+		for (var i = 0; i < 4; ++i) {
 			_ = tier.Allocate(5, out _);
 		}
 		_ = tier.Allocate(5, out _);

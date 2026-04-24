@@ -52,7 +52,7 @@ public sealed class SegmentedStringPoolLifecycleTests
 	{
 		using var pool = new SegmentedStringPool();
 		pool.Reserve(1_000_000);
-		for (var i = 0; i < 1000; i++) {
+		for (var i = 0; i < 1000; ++i) {
 			_ = pool.Allocate(new string('x', 500));
 		}
 	}

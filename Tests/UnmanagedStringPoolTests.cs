@@ -310,14 +310,14 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 	{
 		var strings = new List<PooledString>();
 
-		for (var i = 0; i < 100; i++) {
+		for (var i = 0; i < 100; ++i) {
 			strings.Add(pool.Allocate($"String {i}"));
 		}
 
 		Assert.Equal(100, pool.ActiveAllocations);
 
 		// Verify all strings are correct
-		for (var i = 0; i < 100; i++) {
+		for (var i = 0; i < 100; ++i) {
 			Assert.Equal($"String {i}", strings[i].ToString());
 		}
 	}
@@ -338,7 +338,7 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 		var random = new Random(42); // Fixed seed for reproducibility
 		var activeStrings = new List<PooledString>();
 
-		for (var i = 0; i < 200; i++) {
+		for (var i = 0; i < 200; ++i) {
 			if (activeStrings.Count == 0 || random.Next(3) == 0) // Allocate
 			{
 				var content = $"String_{i}_{random.Next(1000)}";

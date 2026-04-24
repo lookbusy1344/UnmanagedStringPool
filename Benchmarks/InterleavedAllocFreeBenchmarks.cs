@@ -40,7 +40,7 @@ public class InterleavedAllocFreeBenchmarks
 	public string InterleavedAllocFree_Managed()
 	{
 		var window = new string[WindowSize];
-		for (var i = 0; i < N; i++) {
+		for (var i = 0; i < N; ++i) {
 			window[i % WindowSize] = new string('x', StringLength);
 		}
 		return window[(N - 1) % WindowSize];
@@ -50,7 +50,7 @@ public class InterleavedAllocFreeBenchmarks
 	public PooledString InterleavedAllocFree_Legacy()
 	{
 		var window = new PooledString[WindowSize];
-		for (var i = 0; i < N; i++) {
+		for (var i = 0; i < N; ++i) {
 			var slot = i % WindowSize;
 			if (i >= WindowSize) {
 				window[slot].Free();
@@ -59,7 +59,7 @@ public class InterleavedAllocFreeBenchmarks
 		}
 		var last = window[(N - 1) % WindowSize];
 		var limit = Math.Min(N, WindowSize);
-		for (var i = 0; i < limit; i++) {
+		for (var i = 0; i < limit; ++i) {
 			window[i].Free();
 		}
 		return last;
@@ -69,7 +69,7 @@ public class InterleavedAllocFreeBenchmarks
 	public PooledStringRef InterleavedAllocFree_Segmented()
 	{
 		var window = new PooledStringRef[WindowSize];
-		for (var i = 0; i < N; i++) {
+		for (var i = 0; i < N; ++i) {
 			var slot = i % WindowSize;
 			if (i >= WindowSize) {
 				window[slot].Free();
@@ -78,7 +78,7 @@ public class InterleavedAllocFreeBenchmarks
 		}
 		var last = window[(N - 1) % WindowSize];
 		var limit = Math.Min(N, WindowSize);
-		for (var i = 0; i < limit; i++) {
+		for (var i = 0; i < limit; ++i) {
 			window[i].Free();
 		}
 		return last;

@@ -26,7 +26,7 @@ public sealed class SegmentedArenaTierTests : IDisposable
 	[Fact]
 	public void Allocate_BeyondSegmentCapacity_AddsNewSegment()
 	{
-		for (var i = 0; i < 10; i++) {
+		for (var i = 0; i < 10; ++i) {
 			_ = tier.Allocate(1024, out _);
 		}
 		Assert.True(tier.SegmentCount >= 2);
@@ -53,7 +53,7 @@ public sealed class SegmentedArenaTierTests : IDisposable
 	public void LocateSegmentByPointer_FindsOwner()
 	{
 		var ptr1 = tier.Allocate(1024, out var s1);
-		for (var i = 0; i < 10; i++) { _ = tier.Allocate(1024, out _); }
+		for (var i = 0; i < 10; ++i) { _ = tier.Allocate(1024, out _); }
 		var found = tier.LocateSegmentByPointer(ptr1);
 		Assert.Same(s1, found);
 	}

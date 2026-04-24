@@ -118,7 +118,7 @@ public class FinalizerBehaviorTests
 		// Create pools on multiple threads to test finalizer thread safety
 		var tasks = new Task[Environment.ProcessorCount];
 
-		for (var i = 0; i < tasks.Length; i++) {
+		for (var i = 0; i < tasks.Length; ++i) {
 			tasks[i] = Task.Run(() => {
 				CreateUndisposedPool();
 			});
@@ -142,12 +142,12 @@ public class FinalizerBehaviorTests
 		var initialMemory = GC.GetTotalMemory(true);
 
 		// Create and abandon many pools to test for memory leaks
-		for (var i = 0; i < 100; i++) {
+		for (var i = 0; i < 100; ++i) {
 			CreateUndisposedPool();
 		}
 
 		// Force multiple GC cycles
-		for (var i = 0; i < 5; i++) {
+		for (var i = 0; i < 5; ++i) {
 			ForceFinalizerExecution();
 		}
 
@@ -166,12 +166,12 @@ public class FinalizerBehaviorTests
 		var initialMemory = GC.GetTotalMemory(true);
 
 		// Create pools with large allocations
-		for (var i = 0; i < 10; i++) {
+		for (var i = 0; i < 10; ++i) {
 			CreateLargeUndisposedPool(1024 * 1024); // 1MB pools
 		}
 
 		// Force finalizer execution
-		for (var i = 0; i < 3; i++) {
+		for (var i = 0; i < 3; ++i) {
 			ForceFinalizerExecution();
 		}
 
@@ -207,7 +207,7 @@ public class FinalizerBehaviorTests
 #pragma warning disable CA2000 // Dispose objects before losing scope
 		var pool = new UnmanagedStringPool(2048);
 
-		for (var i = 0; i < 10; i++) {
+		for (var i = 0; i < 10; ++i) {
 			var str = pool.Allocate($"Test String {i}");
 			_ = str.ToString(); // Use the string
 		}
@@ -220,7 +220,7 @@ public class FinalizerBehaviorTests
 	private static void CreateMultipleUndisposedPools(int count)
 	{
 #pragma warning disable CA2000 // Dispose objects before losing scope
-		for (var i = 0; i < count; i++) {
+		for (var i = 0; i < count; ++i) {
 			var pool = new UnmanagedStringPool(512);
 			var str = pool.Allocate($"Pool {i} String");
 			_ = str.ToString();
@@ -236,7 +236,7 @@ public class FinalizerBehaviorTests
 		var strings = new PooledString[20];
 
 		// Create fragmentation
-		for (var i = 0; i < strings.Length; i++) {
+		for (var i = 0; i < strings.Length; ++i) {
 			strings[i] = pool.Allocate($"Fragment {i}");
 		}
 
@@ -255,7 +255,7 @@ public class FinalizerBehaviorTests
 		// Create memory pressure
 		var memoryHogs = new byte[10][];
 		try {
-			for (var i = 0; i < memoryHogs.Length; i++) {
+			for (var i = 0; i < memoryHogs.Length; ++i) {
 				memoryHogs[i] = new byte[1024 * 1024]; // 1MB each
 			}
 
@@ -296,7 +296,7 @@ public class FinalizerBehaviorTests
 	private static void ForceFinalizerExecution()
 	{
 		// Multiple rounds of GC to ensure finalizers run
-		for (var i = 0; i < 3; i++) {
+		for (var i = 0; i < 3; ++i) {
 			GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced);
 			GC.WaitForPendingFinalizers();
 			Thread.Sleep(10); // Small delay to allow finalizer thread to work

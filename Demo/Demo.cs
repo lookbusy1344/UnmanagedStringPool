@@ -175,7 +175,7 @@ public static class StringDemo
 		const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ";
 		var buffer = length <= 256 ? stackalloc char[length] : new char[length];
 
-		for (var i = 0; i < length; i++) {
+		for (var i = 0; i < length; ++i) {
 			buffer[i] = chars[Random.Shared.Next(chars.Length)];
 		}
 

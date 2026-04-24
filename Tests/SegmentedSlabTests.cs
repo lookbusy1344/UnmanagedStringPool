@@ -44,7 +44,7 @@ public sealed class SegmentedSlabTests : IDisposable
 	[Fact]
 	public void TryAllocateCell_Full_ReturnsFalse()
 	{
-		for (var i = 0; i < 8; i++) {
+		for (var i = 0; i < 8; ++i) {
 			Assert.True(slab.TryAllocateCell(out _));
 		}
 		Assert.True(slab.IsFull);
@@ -73,7 +73,7 @@ public sealed class SegmentedSlabTests : IDisposable
 	[Fact]
 	public void CellIndexFromOffset_Roundtrips()
 	{
-		for (var i = 0; i < 8; i++) {
+		for (var i = 0; i < 8; ++i) {
 			Assert.Equal(i, slab.CellIndexFromOffset(slab.OffsetOfCell(i)));
 		}
 	}

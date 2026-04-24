@@ -129,7 +129,7 @@ public sealed class SegmentedSlotTableTests
 	public void Allocate_BeyondInitialCapacity_Grows()
 	{
 		var table = new SegmentedSlotTable(initialCapacity: 4);
-		for (var i = 0; i < 10; i++) {
+		for (var i = 0; i < 10; ++i) {
 			_ = table.Allocate((IntPtr)(0x100 + i), 1);
 		}
 		Assert.Equal(10, table.ActiveCount);

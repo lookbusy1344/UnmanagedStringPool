@@ -38,7 +38,7 @@ public class BulkAllocateBenchmarks
 	public string[] BulkAllocate_Managed()
 	{
 		var arr = new string[N];
-		for (var i = 0; i < N; i++) {
+		for (var i = 0; i < N; ++i) {
 			arr[i] = new string('x', StringLength);
 		}
 		return arr;
@@ -48,10 +48,10 @@ public class BulkAllocateBenchmarks
 	public PooledString[] BulkAllocate_Legacy()
 	{
 		var arr = new PooledString[N];
-		for (var i = 0; i < N; i++) {
+		for (var i = 0; i < N; ++i) {
 			arr[i] = _legacy.Allocate(_source);
 		}
-		for (var i = 0; i < N; i++) {
+		for (var i = 0; i < N; ++i) {
 			arr[i].Free();
 		}
 		return arr;
@@ -61,10 +61,10 @@ public class BulkAllocateBenchmarks
 	public PooledStringRef[] BulkAllocate_Segmented()
 	{
 		var arr = new PooledStringRef[N];
-		for (var i = 0; i < N; i++) {
+		for (var i = 0; i < N; ++i) {
 			arr[i] = _segmented.Allocate(_source);
 		}
-		for (var i = 0; i < N; i++) {
+		for (var i = 0; i < N; ++i) {
 			arr[i].Free();
 		}
 		return arr;

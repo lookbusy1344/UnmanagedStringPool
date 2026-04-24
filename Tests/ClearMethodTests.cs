@@ -172,7 +172,7 @@ public sealed class ClearMethodTests : IDisposable
 	{
 		// Arrange
 		var ids = new uint[10];
-		for (var i = 0; i < 5; i++) {
+		for (var i = 0; i < 5; ++i) {
 			ids[i] = pool.Allocate($"String{i}").AllocationId;
 		}
 
@@ -180,7 +180,7 @@ public sealed class ClearMethodTests : IDisposable
 		pool.Clear();
 
 		// Allocate more strings
-		for (var i = 5; i < 10; i++) {
+		for (var i = 5; i < 10; ++i) {
 			ids[i] = pool.Allocate($"String{i}").AllocationId;
 		}
 
@@ -188,8 +188,8 @@ public sealed class ClearMethodTests : IDisposable
 		Assert.Equal(ids.Length, ids.Distinct().Count());
 
 		// New IDs should be higher than old ones
-		for (var i = 0; i < 5; i++) {
-			for (var j = 5; j < 10; j++) {
+		for (var i = 0; i < 5; ++i) {
+			for (var j = 5; j < 10; ++j) {
 				Assert.True(ids[j] > ids[i],
 					$"New ID {ids[j]} at index {j} should be greater than old ID {ids[i]} at index {i}");
 			}
@@ -205,7 +205,7 @@ public sealed class ClearMethodTests : IDisposable
 	{
 		// Arrange - create fragmentation
 		var strings = new PooledString[10];
-		for (var i = 0; i < 10; i++) {
+		for (var i = 0; i < 10; ++i) {
 			strings[i] = pool.Allocate($"String number {i}");
 		}
 
@@ -266,7 +266,7 @@ public sealed class ClearMethodTests : IDisposable
 	{
 		// Arrange - force defragmentation
 		var strings = new PooledString[50];
-		for (var i = 0; i < 50; i++) {
+		for (var i = 0; i < 50; ++i) {
 			strings[i] = pool.Allocate($"String {i}");
 		}
 

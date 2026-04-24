@@ -358,7 +358,7 @@ public sealed class IntegerOverflowTests : IDisposable
 		// Fill pool with many allocations to stress binary search in free block management
 		var strings = new PooledString[100];
 
-		for (var i = 0; i < strings.Length; i++) {
+		for (var i = 0; i < strings.Length; ++i) {
 			strings[i] = pool.Allocate($"String {i}");
 		}
 
@@ -368,7 +368,7 @@ public sealed class IntegerOverflowTests : IDisposable
 		}
 
 		// Allocate new strings - this will exercise the binary search in FindSuitableFreeBlock
-		for (var i = 0; i < 10; i++) {
+		for (var i = 0; i < 10; ++i) {
 			var newStr = pool.Allocate($"New {i}");
 			Assert.Equal($"New {i}", newStr.ToString());
 		}
@@ -404,7 +404,7 @@ public sealed class IntegerOverflowTests : IDisposable
 		// Create a pattern that will trigger coalescing
 		var strings = new PooledString[50];
 
-		for (var i = 0; i < strings.Length; i++) {
+		for (var i = 0; i < strings.Length; ++i) {
 			strings[i] = testPool.Allocate($"Coalesce test string number {i} with extra content");
 		}
 

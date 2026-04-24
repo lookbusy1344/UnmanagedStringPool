@@ -411,7 +411,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 
 			// Hash last fragment chars
 			var startIndex = span.Length - halfMax;
-			for (var i = startIndex; i < span.Length; i++) {
+			for (var i = startIndex; i < span.Length; ++i) {
 				hash.Add(span[i]);
 			}
 		}
