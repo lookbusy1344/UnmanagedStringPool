@@ -135,13 +135,19 @@ public sealed class SegmentedStringPool : IDisposable
 
 		var raw = new IntPtr(entry.Ptr.ToInt64() & SegmentedConstants.PtrMask);
 		var tier = (int)(entry.Ptr.ToInt64() & SegmentedConstants.TierTagMask);
-		if (tier == SegmentedConstants.TierSlab) {
-			slabTier.Free(raw, (SegmentedSlab)entry.Owner!);
-		} else {
-			SegmentedArenaTier.Free(raw, entry.AllocatedBytes, (SegmentedArenaSegment)entry.Owner!);
+		// Free the slot in a finally block so its index is never leaked even if the tier
+		// throws (which indicates internal corruption — the pool is unusable anyway, but
+		// a leaked slot index would compound the damage by preventing GC of the owner ref).
+		try {
+			if (tier == SegmentedConstants.TierSlab) {
+				slabTier.Free(raw, (SegmentedSlab)entry.Owner!);
+			} else {
+				SegmentedArenaTier.Free(raw, entry.AllocatedBytes, (SegmentedArenaSegment)entry.Owner!);
+			}
 		}
-
-		_ = slots.Free(slotIndex, generation);
+		finally {
+			_ = slots.Free(slotIndex, generation);
+		}
 	}
 
 	/// <summary>
