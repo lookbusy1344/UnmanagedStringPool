@@ -158,8 +158,35 @@ public sealed class SegmentedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Pre-allocates unmanaged capacity for at least <paramref name="chars"/> characters, split evenly between tiers,
-	/// to avoid latency spikes on first use. Does not affect existing allocations.
+	/// Pre-allocates unmanaged slab capacity for at least <paramref name="chars"/> small-string characters,
+	/// distributing slabs proportionally across all size classes.
+	/// </summary>
+	public void ReserveSmall(int chars)
+	{
+		ObjectDisposedException.ThrowIf(disposed, typeof(SegmentedStringPool));
+		if (chars <= 0) {
+			return;
+		}
+
+		slabTier.Reserve(chars);
+	}
+
+	/// <summary>
+	/// Pre-allocates unmanaged arena capacity for at least <paramref name="chars"/> large-string characters.
+	/// </summary>
+	public void ReserveLarge(int chars)
+	{
+		ObjectDisposedException.ThrowIf(disposed, typeof(SegmentedStringPool));
+		if (chars <= 0) {
+			return;
+		}
+
+		arenaTier.Reserve(chars * sizeof(char));
+	}
+
+	/// <summary>
+	/// Pre-allocates unmanaged capacity for at least <paramref name="chars"/> characters, split evenly between tiers.
+	/// For workload-aware pre-warming prefer <see cref="ReserveSmall"/> and <see cref="ReserveLarge"/> directly.
 	/// </summary>
 	public void Reserve(int chars)
 	{
@@ -168,10 +195,8 @@ public sealed class SegmentedStringPool : IDisposable
 			return;
 		}
 
-		var smallBudget = chars / 2;
-		var largeBudget = chars - smallBudget;
-		slabTier.Reserve(smallBudget);
-		arenaTier.Reserve(largeBudget * sizeof(char));
+		ReserveSmall(chars / 2);
+		ReserveLarge(chars - chars / 2);
 	}
 
 	public void Dispose()

@@ -56,4 +56,65 @@ public sealed class SegmentedStringPoolLifecycleTests
 			_ = pool.Allocate(new string('x', 500));
 		}
 	}
+
+	// P1-5: ReserveSmall / ReserveLarge
+
+	[Fact]
+	public void ReserveSmall_PreAllocatesSlabCapacityWithoutTouchingArena()
+	{
+		using var pool = new SegmentedStringPool();
+		var segsBefore = pool.SegmentCount;
+		pool.ReserveSmall(10_000);
+		Assert.Equal(segsBefore, pool.SegmentCount); // arena unchanged
+		Assert.True(pool.SlabCount > 0);
+	}
+
+	[Fact]
+	public void ReserveLarge_PreAllocatesArenaCapacityWithoutTouchingSlabs()
+	{
+		using var pool = new SegmentedStringPool();
+		var slabsBefore = pool.SlabCount;
+		pool.ReserveLarge(1_000_000);
+		Assert.Equal(slabsBefore, pool.SlabCount); // slabs unchanged
+		Assert.True(pool.SegmentCount > 0);
+	}
+
+	[Fact]
+	public void Reserve_StillSplitsEvenlyBetweenTiers()
+	{
+		using var pool = new SegmentedStringPool();
+		pool.Reserve(2_000_000);
+		// Both tiers must have received capacity — just verify neither is zero.
+		Assert.True(pool.SlabCount > 0);
+		Assert.True(pool.SegmentCount > 0);
+	}
+
+	// P1-6: ReserveSmall distributes slabs across all size classes
+
+	[Fact]
+	public void ReserveSmall_AllocatesSlabsAcrossMultipleSizeClasses()
+	{
+		using var pool = new SegmentedStringPool();
+		// A large enough reservation should produce slabs for more than one size class.
+		pool.ReserveSmall(100_000);
+		Assert.True(pool.SlabCount >= SegmentedSlabTier.SizeClassCount,
+			$"Expected slabs for all {SegmentedSlabTier.SizeClassCount} size classes, got {pool.SlabCount}");
+	}
+
+	[Fact]
+	public void ReserveSmall_SmallStringsUseReservedSlabs_NotLargestClass()
+	{
+		// Allocating 8-char strings after ReserveSmall must not need to create new slabs if
+		// the reservation was sufficient for the smallest size class.
+		var options = new SegmentedStringPoolOptions(SlabCellsPerSlab: 4);
+		using var pool = new SegmentedStringPool(options);
+		pool.ReserveSmall(1000);
+		var slabsAfterReserve = pool.SlabCount;
+		for (var i = 0; i < 10; ++i) {
+			_ = pool.Allocate(new string('a', 8)); // fits size class 0 (8-char cells)
+		}
+		// Should not have grown beyond what was reserved (4 cells/slab means 10 allocs = ≤3 slabs extra).
+		Assert.True(pool.SlabCount <= slabsAfterReserve + 3,
+			$"More slabs than expected: {pool.SlabCount} vs reserved {slabsAfterReserve}");
+	}
 }

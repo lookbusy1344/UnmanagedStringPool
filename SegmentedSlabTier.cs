@@ -34,6 +34,8 @@ internal sealed class SegmentedSlabTier : IDisposable
 		this.cellsPerSlab = cellsPerSlab;
 	}
 
+	public const int SizeClassCount = SegmentedConstants.SlabSizeClassCount;
+
 	public int SlabCount => allSlabs.Count;
 
 	public long UnmanagedBytes
@@ -143,16 +145,31 @@ internal sealed class SegmentedSlabTier : IDisposable
 	}
 
 	/// <summary>
-	/// Pre-allocates slab capacity for at least <paramref name="smallChars"/> chars of small-string storage.
-	/// Always uses the largest size class (128-char cells) so any future small string fits in the reserved slabs.
+	/// Pre-allocates slab capacity for at least <paramref name="smallChars"/> chars of small-string storage,
+	/// distributing the budget evenly across all five size classes. Previously this always used the largest
+	/// class (128-char cells), which wasted capacity when workloads were dominated by smaller strings.
 	/// </summary>
 	public void Reserve(int smallChars)
 	{
-		const int sizeClass = SegmentedConstants.SlabSizeClassCount - 1;
-		var perSlabChars = cellsPerSlab * (CellBytesForSizeClass(sizeClass) / sizeof(char));
-		while (allSlabs.Count * perSlabChars < smallChars) {
-			_ = AllocateNewSlab(sizeClass);
+		var perClassChars = smallChars / SegmentedConstants.SlabSizeClassCount;
+		for (var sizeClass = 0; sizeClass < SegmentedConstants.SlabSizeClassCount; ++sizeClass) {
+			var charsPerSlab = cellsPerSlab * (CellBytesForSizeClass(sizeClass) / sizeof(char));
+			var existingChars = SlabCountForClass(sizeClass) * charsPerSlab;
+			while (existingChars < perClassChars) {
+				_ = AllocateNewSlab(sizeClass);
+				existingChars += charsPerSlab;
+			}
 		}
+	}
+
+	private int SlabCountForClass(int sizeClass)
+	{
+		var count = 0;
+		foreach (var s in allSlabs) {
+			if (s.SizeClass == sizeClass) { ++count; }
+		}
+
+		return count;
 	}
 
 	public void Dispose()
