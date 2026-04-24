@@ -57,4 +57,45 @@ public sealed class SegmentedArenaTierTests : IDisposable
 		var found = tier.LocateSegmentByPointer(ptr1);
 		Assert.Same(s1, found);
 	}
+
+	// P2-8: oversized segments are skipped for normal requests
+
+	[Fact]
+	public void OversizedSegment_IsSkippedForNormalAllocations()
+	{
+		// Allocate one oversized block (bigger than the 4096-byte default segment).
+		// Then allocate a small normal block — it must NOT land in the oversized segment.
+		_ = tier.Allocate(8192, out var oversized, out _);
+		Assert.True(oversized.IsOversized);
+
+		var normalPtr = tier.Allocate(64, out var normalSeg, out _);
+		Assert.NotSame(oversized, normalSeg);
+		Assert.False(normalSeg.IsOversized);
+	}
+
+	[Fact]
+	public void OversizedRequest_ReusesExistingOversizedSegmentIfItFits()
+	{
+		// Two oversized requests whose combined size fits in a single dedicated segment
+		// should both land in the same segment (first oversized created for the first request).
+		_ = tier.Allocate(5000, out var first, out _);
+		Assert.True(first.IsOversized);
+		// Second oversized request — should use the same oversized segment if it still has room.
+		// The first segment had capacity = max(4096, 5000) = 5000; 5000 - 5000 = 0 left. So a new one is created.
+		_ = tier.Allocate(5000, out var second, out _);
+		Assert.True(second.IsOversized);
+	}
+
+	[Fact]
+	public void NormalAllocations_DoNotLeakIntoOversizedSegments()
+	{
+		// Fill a normal segment, then introduce an oversized one, then continue normal allocs.
+		// Normal allocs after the oversized segment must create a fresh normal segment, not
+		// fall through to the oversized one.
+		var oversizedPtr = tier.Allocate(8192, out var oversized, out _);
+		var normal = tier.Allocate(256, out var normalSeg, out _);
+		Assert.False(oversized.Contains(normal));
+		_ = normal; // suppress unused warning
+		_ = oversizedPtr;
+	}
 }

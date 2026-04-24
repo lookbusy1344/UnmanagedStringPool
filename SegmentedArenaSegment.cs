@@ -46,6 +46,12 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	public readonly IntPtr Buffer;
 	public readonly int Capacity;
 	public int BumpOffset;
+
+	// Set by SegmentedArenaTier when this segment was created to satisfy a single request
+	// larger than the default segment size. The normal allocation loop skips oversized segments
+	// so that small subsequent allocations don't mix into a dedicated large-string segment.
+	public bool IsOversized;
+
 	private BinHeadArray binHeads;
 	private bool disposed;
 

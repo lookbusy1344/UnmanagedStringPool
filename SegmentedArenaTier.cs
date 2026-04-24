@@ -47,7 +47,15 @@ internal sealed class SegmentedArenaTier : IDisposable
 	/// </summary>
 	public IntPtr Allocate(int byteCount, out SegmentedArenaSegment owningSegment, out int allocatedBytes)
 	{
+		var isOversizedRequest = byteCount > defaultSegmentBytes;
 		foreach (var s in segments) {
+			// Skip dedicated oversized segments for normal requests — mixing small and large
+			// allocations into an oversized segment defeats its "dedicated" purpose and causes
+			// fragmentation in a segment that the large allocation was supposed to own entirely.
+			if (s.IsOversized != isOversizedRequest) {
+				continue;
+			}
+
 			if (!s.TryAllocate(byteCount, out var ptr, out var actual)) {
 				continue;
 			}
@@ -58,7 +66,7 @@ internal sealed class SegmentedArenaTier : IDisposable
 		}
 
 		var capacity = Math.Max(defaultSegmentBytes, byteCount);
-		var segment = new SegmentedArenaSegment(capacity);
+		var segment = new SegmentedArenaSegment(capacity) { IsOversized = isOversizedRequest };
 		segments.Add(segment);
 		_ = segment.TryAllocate(byteCount, out var newPtr, out allocatedBytes);
 		owningSegment = segment;
