@@ -36,6 +36,10 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 
 	public ReadOnlySpan<char> AsSpan() => IsEmpty ? [] : Pool!.ReadSlot(SlotIndex, Generation);
 
+	/// <summary>
+	/// Returns the allocation to the pool. Idempotent: double-free, free-after-pool-dispose,
+	/// and free-of-a-stale-ref all silently no-op via the generation check in <c>TryReadSlot</c>.
+	/// </summary>
 	public void Free() => Pool?.FreeSlot(SlotIndex, Generation);
 
 	public void Dispose() => Free();

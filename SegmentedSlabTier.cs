@@ -27,6 +27,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 	// Tracks every slab regardless of chain state so LocateSlabByPointer can find full (off-chain) slabs during Free.
 	private readonly List<SegmentedSlab> allSlabs = [];
 	private readonly int cellsPerSlab;
+	private bool disposed;
 
 	public SegmentedSlabTier(int cellsPerSlab)
 	{
@@ -76,6 +77,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 	/// </summary>
 	public IntPtr Allocate(int charCount, out SegmentedSlab owningSlab)
 	{
+		ObjectDisposedException.ThrowIf(disposed, this);
 		var sizeClass = ChooseSizeClass(charCount);
 		if (sizeClass < 0) {
 			throw new InvalidOperationException("Size exceeds slab threshold; caller should route to arena");
@@ -151,6 +153,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 	/// </summary>
 	public void Reserve(int smallChars)
 	{
+		ObjectDisposedException.ThrowIf(disposed, this);
 		var perClassChars = smallChars / SegmentedConstants.SlabSizeClassCount;
 		for (var sizeClass = 0; sizeClass < SegmentedConstants.SlabSizeClassCount; ++sizeClass) {
 			var charsPerSlab = cellsPerSlab * (CellBytesForSizeClass(sizeClass) / sizeof(char));
@@ -174,6 +177,9 @@ internal sealed class SegmentedSlabTier : IDisposable
 
 	public void Dispose()
 	{
+		if (disposed) { return; }
+
+		disposed = true;
 		foreach (var s in allSlabs) {
 			s.Dispose();
 		}

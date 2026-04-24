@@ -148,8 +148,8 @@ internal sealed class SegmentedSlab : IDisposable
 	private void Dispose(bool disposing)
 	{
 		if (!disposed) {
+			disposed = true; // set before FreeHGlobal: if FreeHGlobal throws, a finalizer re-run won't double-free
 			Marshal.FreeHGlobal(Buffer);
-			disposed = true;
 		}
 	}
 

@@ -13,6 +13,7 @@ internal sealed class SegmentedArenaTier : IDisposable
 {
 	private readonly List<SegmentedArenaSegment> segments = [];
 	private readonly int defaultSegmentBytes;
+	private bool disposed;
 
 	public SegmentedArenaTier(int segmentBytes)
 	{
@@ -47,6 +48,7 @@ internal sealed class SegmentedArenaTier : IDisposable
 	/// </summary>
 	public IntPtr Allocate(int byteCount, out SegmentedArenaSegment owningSegment, out int allocatedBytes)
 	{
+		ObjectDisposedException.ThrowIf(disposed, this);
 		var isOversizedRequest = byteCount > defaultSegmentBytes;
 		foreach (var s in segments) {
 			// Skip dedicated oversized segments for normal requests — mixing small and large
@@ -108,6 +110,7 @@ internal sealed class SegmentedArenaTier : IDisposable
 
 	public void Reserve(int bytes)
 	{
+		ObjectDisposedException.ThrowIf(disposed, this);
 		var totalBytes = 0;
 		foreach (var s in segments) {
 			totalBytes += s.Capacity;
@@ -122,6 +125,9 @@ internal sealed class SegmentedArenaTier : IDisposable
 
 	public void Dispose()
 	{
+		if (disposed) { return; }
+
+		disposed = true;
 		foreach (var s in segments) {
 			s.Dispose();
 		}

@@ -46,7 +46,8 @@ public sealed class SegmentedStringPool : IDisposable
 	private readonly SegmentedSlabTier slabTier;
 	private readonly SegmentedArenaTier arenaTier;
 	private readonly int smallThreshold;
-	private bool disposed;
+	// volatile: FreeSlot reads this on the user thread while the GC finalizer thread may call ~SegmentedStringPool.
+	private volatile bool disposed;
 
 	public SegmentedStringPool() : this(new()) { }
 
@@ -220,6 +221,9 @@ public sealed class SegmentedStringPool : IDisposable
 		disposed = true;
 		if (disposing) {
 			slots.ClearAllSlots();
+			// Tier classes must not own unmanaged memory directly — each SegmentedSlab /
+			// SegmentedArenaSegment is independently finalizable. If that invariant ever changes,
+			// the Dispose(false) path below must call tier Dispose() as well. (D-3)
 			slabTier.Dispose();
 			arenaTier.Dispose();
 		}
@@ -247,5 +251,14 @@ public sealed class SegmentedStringPool : IDisposable
 		return arenaPtr;
 	}
 
-	~SegmentedStringPool() => Dispose(false);
+	~SegmentedStringPool()
+	{
+		// D-4: surface disposal leaks in debug builds. Debug.WriteLine is safe from a finalizer;
+		// Debug.Assert/Fail would abort the process in non-interactive environments.
+		if (!disposed) {
+			System.Diagnostics.Debug.WriteLine("SegmentedStringPool was not disposed before finalization — unmanaged memory will be reclaimed by GC but later than necessary.");
+		}
+
+		Dispose(false);
+	}
 }
