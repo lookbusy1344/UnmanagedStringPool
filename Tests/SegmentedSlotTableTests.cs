@@ -141,4 +141,60 @@ public sealed class SegmentedSlotTableTests
 		var table = new SegmentedSlotTable(16);
 		Assert.False(table.TryReadSlot(99u, 1u, out _));
 	}
+
+	// P1-4: slot table shrink on ClearAllSlots
+
+	[Fact]
+	public void ClearAllSlots_WithLargeTable_ShrinksToInitialCapacity()
+	{
+		var table = new SegmentedSlotTable(initialCapacity: 16);
+		for (var i = 0; i < 64; ++i) {
+			_ = table.Allocate((IntPtr)(0x100 + i), 1, null, 0);
+		}
+		Assert.True(table.Capacity >= 64);
+		table.ClearAllSlots();
+		Assert.Equal(16, table.Capacity);
+	}
+
+	[Fact]
+	public void ClearAllSlots_NeverShrinksbelowInitialCapacity()
+	{
+		var table = new SegmentedSlotTable(initialCapacity: 16);
+		for (var i = 0; i < 100; ++i) {
+			_ = table.Allocate((IntPtr)(0x100 + i), 1, null, 0);
+		}
+		table.ClearAllSlots();
+		Assert.True(table.Capacity >= 16, $"Capacity dropped below initial: {table.Capacity}");
+	}
+
+	[Fact]
+	public void ClearAllSlots_AfterShrink_SubsequentAllocationsWork()
+	{
+		var table = new SegmentedSlotTable(initialCapacity: 16);
+		for (var i = 0; i < 64; ++i) {
+			_ = table.Allocate((IntPtr)(0x100 + i), 1, null, 0);
+		}
+		table.ClearAllSlots();
+		// After shrink, fresh allocations must succeed and indices must be valid.
+		var (slot, gen) = table.Allocate((IntPtr)0xDEAD, 5, null, 0);
+		Assert.True(table.TryReadSlot(slot, gen, out var entry));
+		Assert.Equal((IntPtr)0xDEAD, entry.Ptr);
+	}
+
+	[Fact]
+	public void IndividualFree_DoesNotShrinkTable()
+	{
+		// Shrink is scoped to ClearAllSlots; individual Free calls must not resize the array
+		// to avoid thrashing in bulk-alloc/bulk-free steady-state workloads.
+		var table = new SegmentedSlotTable(initialCapacity: 16);
+		var handles = new List<(uint slot, uint gen)>();
+		for (var i = 0; i < 64; ++i) {
+			handles.Add(table.Allocate((IntPtr)(0x100 + i), 1, null, 0));
+		}
+		var peakCapacity = table.Capacity;
+		foreach (var (slot, gen) in handles) {
+			_ = table.Free(slot, gen);
+		}
+		Assert.Equal(peakCapacity, table.Capacity);
+	}
 }

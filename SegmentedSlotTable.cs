@@ -12,10 +12,12 @@ internal sealed class SegmentedSlotTable
 	private SegmentedSlotEntry[] slots;
 	private int highWater;
 	private uint freeHead;
+	private readonly int initialCapacity;
 
 	public SegmentedSlotTable(int initialCapacity)
 	{
 		ArgumentOutOfRangeException.ThrowIfLessThan(initialCapacity, 1);
+		this.initialCapacity = initialCapacity;
 		slots = new SegmentedSlotEntry[initialCapacity];
 		freeHead = SegmentedConstants.NoFreeSlot;
 	}
@@ -123,22 +125,20 @@ internal sealed class SegmentedSlotTable
 				slot.Generation = SegmentedSlotEntry.MarkFreeAndBumpGen(slot.Generation);
 			}
 
-			// Thread the free chain through Ptr in sequential index order.
-			var nextIndex = i + 1 < highWater ? i + 1 : (long)SegmentedConstants.NoFreeSlot;
-			slot.Ptr = new(nextIndex);
+			slot.Ptr = default;
 			slot.LengthChars = 0;
 			slot.Owner = null;
 			slot.AllocatedBytes = 0;
 		}
 
-		freeHead = highWater == 0 ? SegmentedConstants.NoFreeSlot : 0u;
+		// Reset to pristine: highWater=0 means MaybeShrink can always collapse the array,
+		// and subsequent Allocate calls bump from 0 just like a freshly-constructed table.
+		highWater = 0;
+		freeHead = SegmentedConstants.NoFreeSlot;
 		ActiveCount = 0;
+		MaybeShrink();
 	}
 
-	/// <summary>
-	/// Doubles the slot array. This is the only managed heap allocation that occurs during steady-state pool usage;
-	/// it is amortised O(1) per allocation because it happens at powers-of-two boundaries.
-	/// </summary>
 	private void Grow()
 	{
 		var newCapacity = slots.Length * 2;
@@ -147,5 +147,34 @@ internal sealed class SegmentedSlotTable
 		}
 
 		Array.Resize(ref slots, newCapacity);
+	}
+
+	// Halves the backing array when the table is sparse and has grown past its initial size.
+	// Conditions: ActiveCount < Capacity/4 (sparse enough) and highWater <= Capacity/2 (no live
+	// slot index falls in the upper half, so truncation is safe). Never shrinks below initialCapacity.
+	// Halves the backing array repeatedly while the table is sparse and highWater fits in the smaller
+	// half. Loops so that a Clear() after a large peak collapses all the way back to initialCapacity
+	// in one shot rather than requiring one Free call per halving step.
+	private void MaybeShrink()
+	{
+		while (slots.Length > initialCapacity && ActiveCount < slots.Length / 4) {
+			var newCapacity = Math.Max(initialCapacity, slots.Length / 2);
+			if (highWater > newCapacity) {
+				break; // live slot indices in the upper half — cannot truncate
+			}
+
+			// Rebuild the free chain within [0, newCapacity). Chain links written during Free may
+			// point into the soon-to-be-removed upper half; a fresh pass avoids out-of-bounds reads.
+			freeHead = SegmentedConstants.NoFreeSlot;
+			for (var i = highWater - 1; i >= 0; --i) {
+				ref var slot = ref slots[i];
+				if (SegmentedSlotEntry.IsFree(slot.Generation)) {
+					slot.Ptr = new((long)freeHead);
+					freeHead = (uint)i;
+				}
+			}
+
+			Array.Resize(ref slots, newCapacity);
+		}
 	}
 }
