@@ -91,7 +91,7 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 		if (value.IsEmpty) {
 			return Duplicate();
 		}
-		var totalLength = original.Length + value.Length;
+		var totalLength = checked(original.Length + value.Length);
 		char[]? rented = null;
 		Span<char> buffer = totalLength <= 256
 			? stackalloc char[totalLength]
@@ -124,9 +124,14 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 			return Empty;
 		}
 
+		// Upper bound on possible matches: source.Length / oldValue.Length + 1.
+		// Renting once upfront avoids the doubling churn (64→128→256…) of the old strategy.
+		var maxMatches = Math.Max(ReplaceInlineMatchCap, source.Length / oldValue.Length + 1);
 		Span<int> inlineMatches = stackalloc int[ReplaceInlineMatchCap];
-		int[]? rentedMatches = null;
-		Span<int> matches = inlineMatches;
+		int[]? rentedMatches = maxMatches > ReplaceInlineMatchCap
+			? ArrayPool<int>.Shared.Rent(maxMatches)
+			: null;
+		Span<int> matches = rentedMatches is not null ? rentedMatches.AsSpan(0, maxMatches) : inlineMatches;
 		var matchCount = 0;
 
 		var searchStart = 0;
@@ -136,16 +141,6 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 				break;
 			}
 			var absolute = searchStart + found;
-			if (matchCount == matches.Length) {
-				var newSize = matches.Length * 2;
-				var nextRented = ArrayPool<int>.Shared.Rent(newSize);
-				matches.Slice(0, matchCount).CopyTo(nextRented);
-				if (rentedMatches is not null) {
-					ArrayPool<int>.Shared.Return(rentedMatches);
-				}
-				rentedMatches = nextRented;
-				matches = rentedMatches;
-			}
 			matches[matchCount++] = absolute;
 			searchStart = absolute + oldValue.Length;
 		}
@@ -157,26 +152,28 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 			return Duplicate();
 		}
 
-		var totalLength = source.Length + (matchCount * (newValue.Length - oldValue.Length));
 		char[]? rentedChars = null;
-		Span<char> buffer = totalLength <= 256
-			? stackalloc char[totalLength]
-			: (rentedChars = ArrayPool<char>.Shared.Rent(totalLength)).AsSpan(0, totalLength);
-
-		var srcCursor = 0;
-		var dstCursor = 0;
-		for (var i = 0; i < matchCount; ++i) {
-			var matchAt = matches[i];
-			var preLen = matchAt - srcCursor;
-			source.Slice(srcCursor, preLen).CopyTo(buffer.Slice(dstCursor));
-			dstCursor += preLen;
-			newValue.CopyTo(buffer.Slice(dstCursor));
-			dstCursor += newValue.Length;
-			srcCursor = matchAt + oldValue.Length;
-		}
-		source.Slice(srcCursor).CopyTo(buffer.Slice(dstCursor));
-
 		try {
+			// checked: source.Length + matchCount*(delta) can overflow int when the replacement
+			// string is much larger than the old value and there are many matches.
+			var totalLength = checked(source.Length + (matchCount * (newValue.Length - oldValue.Length)));
+			Span<char> buffer = totalLength <= 256
+				? stackalloc char[totalLength]
+				: (rentedChars = ArrayPool<char>.Shared.Rent(totalLength)).AsSpan(0, totalLength);
+
+			var srcCursor = 0;
+			var dstCursor = 0;
+			for (var i = 0; i < matchCount; ++i) {
+				var matchAt = matches[i];
+				var preLen = matchAt - srcCursor;
+				source.Slice(srcCursor, preLen).CopyTo(buffer.Slice(dstCursor));
+				dstCursor += preLen;
+				newValue.CopyTo(buffer.Slice(dstCursor));
+				dstCursor += newValue.Length;
+				srcCursor = matchAt + oldValue.Length;
+			}
+			source.Slice(srcCursor).CopyTo(buffer.Slice(dstCursor));
+
 			return Pool.Allocate(buffer);
 		}
 		finally {

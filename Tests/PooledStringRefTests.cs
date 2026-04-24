@@ -406,4 +406,31 @@ public sealed class PooledStringRefEqualityTests : IDisposable
 		Assert.True(a == b);
 		Assert.False(a != b);
 	}
+
+	// P2-5: Replace single-rent strategy
+
+	[Fact]
+	public void Replace_ManyMatches_SingleRentNoChurn()
+	{
+		// Correctness at scale: > ReplaceInlineMatchCap matches must complete without error
+		// and produce the correct result. With the old doubling strategy this exercised
+		// multiple rent/return/copy cycles; with the single-rent fix it rents once upfront.
+		var src = pool.Allocate(new string('a', 200));
+		var result = src.Replace("a".AsSpan(), "bb".AsSpan());
+		Assert.Equal(400, result.Length);
+		Assert.True(result.AsSpan().IndexOf('a') < 0, "All 'a's should be replaced");
+	}
+
+	// P2-6: overflow checks on Insert / Replace totalLength
+
+	[Fact]
+	public void Replace_TotalLengthExpansionOverflow_ThrowsOverflowException()
+	{
+		// source = 1000 'a' chars; replace each "a" with a 2.2M-char string.
+		// totalLength = 1000 + 1000*(2_200_000 - 1) ≈ 2.2B > int.MaxValue → checked overflow.
+		// newValue is a managed string, not a pool allocation — no arena reservation needed.
+		var src = pool.Allocate(new string('a', 1000));
+		var bigNew = new string('b', 2_200_000); // captured as string; .AsSpan() called inside lambda
+		_ = Assert.Throws<OverflowException>(() => src.Replace("a".AsSpan(), bigNew.AsSpan()));
+	}
 }
