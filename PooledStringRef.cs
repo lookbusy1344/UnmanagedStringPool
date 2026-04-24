@@ -15,7 +15,7 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 	// Stack-allocate match positions for up to this many occurrences before renting from ArrayPool.
 	private const int ReplaceInlineMatchCap = 64;
 
-	public PooledStringRef(SegmentedStringPool? pool, uint slotIndex, uint generation)
+	internal PooledStringRef(SegmentedStringPool? pool, uint slotIndex, uint generation)
 	{
 		Pool = pool;
 		SlotIndex = slotIndex;
