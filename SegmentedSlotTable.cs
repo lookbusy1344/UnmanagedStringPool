@@ -119,16 +119,20 @@ internal sealed class SegmentedSlotTable
 	/// </summary>
 	public void ClearAllSlots()
 	{
-		for (var i = 0; i < highWater; ++i) {
-			ref var slot = ref slots[i];
-			if (!SegmentedSlotEntry.IsFree(slot.Generation)) {
-				slot.Generation = SegmentedSlotEntry.MarkFreeAndBumpGen(slot.Generation);
-			}
+		// When already empty skip the scan: every slot is already free, owners are null,
+		// and generations already have the high bit set.
+		if (ActiveCount > 0) {
+			for (var i = 0; i < highWater; ++i) {
+				ref var slot = ref slots[i];
+				if (!SegmentedSlotEntry.IsFree(slot.Generation)) {
+					slot.Generation = SegmentedSlotEntry.MarkFreeAndBumpGen(slot.Generation);
+				}
 
-			slot.Ptr = default;
-			slot.LengthChars = 0;
-			slot.Owner = null;
-			slot.AllocatedBytes = 0;
+				slot.Ptr = default;
+				slot.LengthChars = 0;
+				slot.Owner = null;
+				slot.AllocatedBytes = 0;
+			}
 		}
 
 		// Reset to pristine: highWater=0 means MaybeShrink can always collapse the array,

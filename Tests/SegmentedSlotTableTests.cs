@@ -182,6 +182,18 @@ public sealed class SegmentedSlotTableTests
 	}
 
 	[Fact]
+	public void ClearAllSlots_WhenAlreadyEmpty_IsIdempotentAndFast()
+	{
+		// P2-1: ClearAllSlots must not iterate slots when ActiveCount == 0.
+		var table = new SegmentedSlotTable(16);
+		table.ClearAllSlots(); // already empty — must not throw or corrupt state
+		Assert.Equal(0, table.ActiveCount);
+		// Subsequent alloc must still work.
+		var (slot, gen) = table.Allocate((IntPtr)0xABC, 1, null, 0);
+		Assert.True(table.TryReadSlot(slot, gen, out _));
+	}
+
+	[Fact]
 	public void IndividualFree_DoesNotShrinkTable()
 	{
 		// Shrink is scoped to ClearAllSlots; individual Free calls must not resize the array
