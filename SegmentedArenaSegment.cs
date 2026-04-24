@@ -48,8 +48,6 @@ internal sealed class SegmentedArenaSegment : IDisposable
 
 	public long UnmanagedBytes => Capacity;
 
-	public SegmentedArenaSegment? Next { get; set; }
-
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public bool Contains(IntPtr ptr)
 	{
