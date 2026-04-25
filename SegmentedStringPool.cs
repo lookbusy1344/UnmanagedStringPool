@@ -76,13 +76,13 @@ public sealed class SegmentedStringPool : IDisposable
 	}
 
 	public int ActiveAllocations => slots.ActiveCount;
-	public long TotalBytesUnmanaged => slabTier.UnmanagedBytes + arenaTier.UnmanagedBytes;
+	public long GetTotalBytesUnmanaged() => slabTier.GetUnmanagedBytes() + arenaTier.GetUnmanagedBytes();
 	/// <summary>
 	/// Lower-bound estimate of managed heap bytes owned by this pool. Includes the slot-entry array
 	/// and slab bitmap arrays; excludes GC object headers and framework list overhead.
 	/// </summary>
-	public long TotalBytesManaged =>
-		slots.Capacity * (long)Unsafe.SizeOf<SegmentedSlotEntry>() + slabTier.ManagedBitmapBytes;
+	public long GetTotalBytesManaged() =>
+		slots.Capacity * (long)Unsafe.SizeOf<SegmentedSlotEntry>() + slabTier.GetManagedBitmapBytes();
 	public int SlabCount => slabTier.SlabCount;
 	public int SegmentCount => arenaTier.SegmentCount;
 	internal bool IsDisposed => disposed;

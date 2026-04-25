@@ -23,17 +23,14 @@ internal sealed class SegmentedArenaTier : IDisposable
 
 	public int SegmentCount => segments.Count;
 
-	public long UnmanagedBytes
+	public long GetUnmanagedBytes()
 	{
-		get
-		{
-			long total = 0;
-			foreach (var s in segments) {
-				total += s.UnmanagedBytes;
-			}
-
-			return total;
+		long total = 0;
+		foreach (var s in segments) {
+			total += s.UnmanagedBytes;
 		}
+
+		return total;
 	}
 
 	/// <summary>

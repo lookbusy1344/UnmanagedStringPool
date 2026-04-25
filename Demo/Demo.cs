@@ -110,7 +110,7 @@ public static class StringDemo
 		WriteLineRef(str3); // This is a longer string
 
 		Console.WriteLine($"Active allocations: {pool.ActiveAllocations}");
-		Console.WriteLine($"Unmanaged bytes: {pool.TotalBytesUnmanaged}");
+		Console.WriteLine($"Unmanaged bytes: {pool.GetTotalBytesUnmanaged()}");
 		Console.WriteLine($"Slab count: {pool.SlabCount}");
 		Console.WriteLine($"Arena segment count: {pool.SegmentCount}");
 
@@ -157,7 +157,7 @@ public static class StringDemo
 		Console.WriteLine();
 		Console.WriteLine("Final segmented pool state:");
 		Console.WriteLine($"Active allocations: {pool.ActiveAllocations}");
-		Console.WriteLine($"Unmanaged bytes: {pool.TotalBytesUnmanaged}");
+		Console.WriteLine($"Unmanaged bytes: {pool.GetTotalBytesUnmanaged()}");
 		Console.WriteLine($"Slab count: {pool.SlabCount}");
 		Console.WriteLine($"Arena segment count: {pool.SegmentCount}");
 	}

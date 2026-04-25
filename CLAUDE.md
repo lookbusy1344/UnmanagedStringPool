@@ -58,3 +58,4 @@ Two-tier allocator: small strings go to the slab tier; larger strings go to the 
 - Test namespace: `LookBusy.Test`
 - Formatting and analyzer rules enforced by `.editorconfig` and the build
 - Prefer pre-increment (`++a`) over post-increment; use post-increment (`a++`) only when the pre-increment value is required (e.g. `array[a++] = 1`)
+- Property getters must be trivially cheap (field read or simple arithmetic). Any getter that loops, allocates, or does non-trivial work must be a method (`GetFoo()`) so callers see the cost.

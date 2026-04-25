@@ -126,18 +126,18 @@ public sealed class SegmentedStringPoolLifecycleTests
 	{
 		using var pool = new SegmentedStringPool(new(InitialSlotCapacity: 64));
 		var slotEntrySize = Unsafe.SizeOf<SegmentedSlotEntry>();
-		Assert.True(pool.TotalBytesManaged >= 64L * slotEntrySize,
-			$"TotalBytesManaged={pool.TotalBytesManaged} should be >= {64L * slotEntrySize}");
+		Assert.True(pool.GetTotalBytesManaged() >= 64L * slotEntrySize,
+			$"TotalBytesManaged={pool.GetTotalBytesManaged()} should be >= {64L * slotEntrySize}");
 	}
 
 	[Fact]
 	public void TotalBytesManaged_GrowsWhenSlabsAdded()
 	{
 		using var pool = new SegmentedStringPool();
-		var before = pool.TotalBytesManaged;
+		var before = pool.GetTotalBytesManaged();
 		pool.ReserveSmall(10_000);
-		Assert.True(pool.TotalBytesManaged > before,
-			$"Expected TotalBytesManaged to grow after ReserveSmall; before={before} after={pool.TotalBytesManaged}");
+		Assert.True(pool.GetTotalBytesManaged() > before,
+			$"Expected TotalBytesManaged to grow after ReserveSmall; before={before} after={pool.GetTotalBytesManaged()}");
 	}
 
 	[Fact]
@@ -146,7 +146,7 @@ public sealed class SegmentedStringPoolLifecycleTests
 		// Each SegmentedSlotEntry is 32 bytes (8 ptr + 8 obj ref + 4 + 4 + 4 + 4 pad).
 		// A fresh pool with 64-slot capacity must report >= 64 * 32 = 2048 bytes.
 		using var pool = new SegmentedStringPool(new(InitialSlotCapacity: 64));
-		Assert.True(pool.TotalBytesManaged >= 2048L,
-			$"TotalBytesManaged={pool.TotalBytesManaged}, expected >= 2048");
+		Assert.True(pool.GetTotalBytesManaged() >= 2048L,
+			$"TotalBytesManaged={pool.GetTotalBytesManaged()}, expected >= 2048");
 	}
 }
