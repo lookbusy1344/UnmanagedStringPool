@@ -204,16 +204,16 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	}
 
 	private unsafe SegmentedFreeBlockHeader ReadHeader(int offset) =>
-		*(SegmentedFreeBlockHeader*)(Buffer.ToInt64() + offset);
+		Unsafe.Read<SegmentedFreeBlockHeader>((void*)(Buffer.ToInt64() + offset));
 
 	private unsafe void WriteHeader(int offset, SegmentedFreeBlockHeader header) =>
-		*(SegmentedFreeBlockHeader*)(Buffer.ToInt64() + offset) = header;
+		Unsafe.Write((void*)(Buffer.ToInt64() + offset), header);
 
 	private unsafe SegmentedFreeBlockFooter ReadFooter(int offset) =>
-		*(SegmentedFreeBlockFooter*)(Buffer.ToInt64() + offset);
+		Unsafe.Read<SegmentedFreeBlockFooter>((void*)(Buffer.ToInt64() + offset));
 
 	private unsafe void WriteFooter(int offset, SegmentedFreeBlockFooter footer) =>
-		*(SegmentedFreeBlockFooter*)(Buffer.ToInt64() + offset) = footer;
+		Unsafe.Write((void*)(Buffer.ToInt64() + offset), footer);
 
 	// Writes the boundary-tag footer at the end of a free block.
 	// footerOffset = blockOffset + blockSize - sizeof(SegmentedFreeBlockFooter)
