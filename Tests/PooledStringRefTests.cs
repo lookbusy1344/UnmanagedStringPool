@@ -30,6 +30,23 @@ public sealed class PooledStringRefTests
 		Assert.Equal(0u, r.SlotIndex);
 		Assert.Equal(0u, r.Generation);
 	}
+
+	// P3-3: allocator invariant — generation is always ≥ 1 for live allocations,
+	// so Pool != null is sufficient to distinguish live refs from the empty sentinel.
+	[Fact]
+	public void IsEmpty_LiveRef_HasNonNullPoolAndGenerationAtLeastOne()
+	{
+		using var pool = new SegmentedStringPool();
+		var r = pool.Allocate("x");
+		try {
+			Assert.False(r.IsEmpty);
+			Assert.NotNull(r.Pool);
+			Assert.True(r.Generation >= 1u);
+		}
+		finally {
+			r.Free();
+		}
+	}
 }
 
 // Task 9: AsSpan, Length, Dispose

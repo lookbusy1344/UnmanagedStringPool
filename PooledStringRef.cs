@@ -28,9 +28,9 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 
 	public static PooledStringRef Empty => default;
 
-	// All three fields must be checked: a non-null Pool with SlotIndex=0 and Generation=0 would be a valid slot 0
-	// whose generation counter hasn't been bumped yet (fresh pool, no alloc) — that is not the empty sentinel.
-	public bool IsEmpty => Pool is null && SlotIndex == 0u && Generation == 0u;
+	// Pool is null only for the default struct. Every real allocation bumps generation to ≥ 1 before
+	// returning, so Pool != null is sufficient to distinguish any live ref from the empty sentinel.
+	public bool IsEmpty => Pool is null;
 
 	public int Length => IsEmpty ? 0 : Pool!.GetLength(SlotIndex, Generation);
 
