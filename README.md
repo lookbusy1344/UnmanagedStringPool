@@ -167,21 +167,21 @@ Two patterns measured against a managed string baseline, parameterised by N (1,0
 
 | Scenario | N | Pool | Speed vs managed | Gen0 reduction | Alloc reduction |
 |---|---|---|---|---|---|
-| Bulk allocate | 10,000 | Legacy | **~19% faster** | 2.9× | 92% |
-| Bulk allocate | 10,000 | Segmented | 1.2× slower | **4.3×** | **97%** |
+| Bulk allocate | 10,000 | Legacy | **~16% faster** | 7.2× | 92% |
+| Bulk allocate | 10,000 | Segmented | **~parity (1.07×)** | **13×** | **97%** |
 | Bulk allocate | 1,000 | Legacy | 1.2× slower | 17× | 94% |
 | Bulk allocate | 1,000 | Segmented | 1.4× slower | **34×** | **97%** |
 | Interleaved alloc/free | 10,000 | Legacy | 1.7× slower | 6.1× | 84% |
-| Interleaved alloc/free | 10,000 | Segmented | **1.3–1.6× slower** | **zero Gen0** | **100%** |
+| Interleaved alloc/free | 10,000 | Segmented | **1.3× slower** | **zero Gen0** | **100%** |
 
 **Small strings (8 chars):**
 
 | Scenario | N | Pool | Speed vs managed | Alloc vs managed |
 |---|---|---|---|---|
-| Bulk allocate | 10,000 | Legacy | 3.6× slower | 88% |
-| Bulk allocate | 10,000 | Segmented | 4.0× slower | **33%** |
-| Interleaved alloc/free | 10,000 | Legacy | 6.7× slower | 220% (worse!) |
-| Interleaved alloc/free | 10,000 | Segmented | **2.0× slower** | **0% (zero alloc)** |
+| Bulk allocate | 10,000 | Legacy | 3.5× slower | 88% |
+| Bulk allocate | 10,000 | Segmented | **2.4× slower** | **33%** |
+| Interleaved alloc/free | 10,000 | Legacy | 6.6× slower | 220% (worse!) |
+| Interleaved alloc/free | 10,000 | Segmented | 5.5× slower | **0% (zero alloc)** |
 
 ```bash
 # Run benchmarks (~90 seconds)
@@ -209,9 +209,9 @@ The architectural differences that make this possible:
 | Defragmentation | O(n) compaction pass at 35% threshold | Not needed — slabs recycle in place |
 | Handle size | 12 bytes (`PooledString`) | 16 bytes (`PooledStringRef`) |
 
-**Where the legacy pool still wins:** bulk allocate-then-free of large strings (≥256 chars) where the working set is stable, not churning. The contiguous block layout gives slightly better cache locality for sequential reads, and the dictionary overhead is amortised when strings live long enough. At N=10,000 bulk, legacy is ~19% faster than managed; segmented is ~20% slower but produces 97% less managed allocation.
+**Where the legacy pool still wins:** bulk allocate-then-free of large strings (≥256 chars) where the working set is stable, not churning. At N=10,000 bulk, legacy is ~16% faster than managed; Segmented is at near-parity (1.07×) while producing 97% less managed allocation. The gap has narrowed but Legacy still has the raw throughput edge.
 
-**The general recommendation:** use `SegmentedStringPool` unless benchmarks on your specific workload show legacy is faster. The Segmented worst case (1.4–1.6× slower than managed) is far less damaging than the Legacy worst case (small-string churn: 6.7× slower, 2.2× more managed allocation than baseline).
+**The general recommendation:** use `SegmentedStringPool` unless benchmarks on your specific workload show Legacy is faster. For large-string bulk Legacy retains a throughput advantage; for everything else — especially mixed sizes and churn — Segmented's zero-allocation property eliminates Gen0 pressure that compounds under concurrent load. Legacy's worst case (small-string churn: 6.6× slower, 2.2× *more* managed allocation than baseline) is significantly worse than its cost in isolation.
 
 ## Which should I use?
 
@@ -232,7 +232,7 @@ The architectural differences that make this possible:
 - String sizes are **mixed or unpredictable**. Legacy is catastrophic for small strings under churn (6.7× slower, creates *more* managed allocation than baseline); Segmented is only 2× slower and still allocates nothing.
 - You cannot easily characterise your workload. Segmented's worst case (~1.4–1.6× slower than managed) is far less damaging than Legacy's worst case (small-string churn, 6.7× slower with 2.2× more managed allocation).
 
-**Important caveat — Segmented is never faster than managed strings in isolation.** The best case is 1.15× slower (large strings, interleaved, N=1,000). The benefit is GC pause elimination: at N=10,000 interleaved, managed strings trigger ~640 Gen0 collections per iteration; Segmented triggers zero. Gen0 is fast but not free — under concurrent load those stop-the-world pauses compound. In a latency-sensitive application (request handling, game loop, real-time processing) where string allocation is a meaningful fraction of the work, removing those pauses can improve end-to-end throughput even though individual `Allocate` calls are slower. If GC pauses are not visible in your latency profile, plain managed strings are the right choice.
+**Important caveat — Segmented is never faster than managed strings in isolation.** The best case is 1.07× slower (large strings, bulk, N=10,000). The benefit is GC pause elimination: at N=10,000 interleaved, managed strings trigger ~640 Gen0 collections per iteration; Segmented triggers zero. Gen0 is fast but not free — under concurrent load those stop-the-world pauses compound. In a latency-sensitive application (request handling, game loop, real-time processing) where string allocation is a meaningful fraction of the work, removing those pauses can improve end-to-end throughput even though individual `Allocate` calls are slower. If GC pauses are not visible in your latency profile, plain managed strings are the right choice. Note also that for small-string (8-char) interleaved churn, Segmented has regressed to ~5.5× slower than managed (while still producing zero managed allocation); at that point managed strings are the throughput-optimal choice unless eliminating Gen0 is the explicit goal.
 
 ### Summary
 
