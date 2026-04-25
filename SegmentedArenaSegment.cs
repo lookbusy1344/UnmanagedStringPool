@@ -71,9 +71,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	public bool Contains(IntPtr ptr)
 	{
 		ObjectDisposedException.ThrowIf(disposed, this);
-		var raw = ptr.ToInt64();
-		var start = Buffer.ToInt64();
-		return raw >= start && raw < start + Capacity;
+		return Buffer.ContainsPointer(Capacity, ptr);
 	}
 
 	/// <summary>

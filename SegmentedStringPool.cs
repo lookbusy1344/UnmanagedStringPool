@@ -23,6 +23,17 @@ internal static class SegmentedConstants
 	public const int MaxSlabSizeClassChars = 128; // largest slab size class; threshold above this has no valid class
 }
 
+internal static class IntPtrExtensions
+{
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static bool ContainsPointer(this IntPtr buffer, long capacity, IntPtr ptr)
+	{
+		var raw = ptr.ToInt64();
+		var start = buffer.ToInt64();
+		return raw >= start && raw < start + capacity;
+	}
+}
+
 public sealed record SegmentedStringPoolOptions(
 	int InitialSlotCapacity = SegmentedConstants.DefaultSlotCapacity,
 	int SlabCellsPerSlab = SegmentedConstants.DefaultSlabCellsPerSlab,

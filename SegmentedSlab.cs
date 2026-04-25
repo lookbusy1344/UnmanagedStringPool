@@ -102,10 +102,7 @@ internal sealed class SegmentedSlab : IDisposable
 	public bool Contains(IntPtr ptr)
 	{
 		ObjectDisposedException.ThrowIf(disposed, this);
-		var raw = ptr.ToInt64();
-		var start = Buffer.ToInt64();
-		var end = start + ((long)cellBytes * cellCount);
-		return raw >= start && raw < end;
+		return Buffer.ContainsPointer((long)cellBytes * cellCount, ptr);
 	}
 
 	/// <summary>
