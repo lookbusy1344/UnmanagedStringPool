@@ -134,4 +134,34 @@ public sealed class SegmentedSlabTierTests : IDisposable
 		_ = tier.Allocate(5, out _);
 		Assert.Equal(slabCountBefore, tier.SlabCount);
 	}
+
+	// P1-3: inject a full slab back onto the active chain (simulating a chain-head invariant
+	// violation) and confirm the recovery path detaches it rather than leaking it into position 2.
+	[Fact]
+	public void Allocate_FullChainHead_RecoveryDetachesFullSlabAndSucceeds()
+	{
+		// Fill slab0 completely so it gets detached.
+		SegmentedSlab? slab0 = null;
+		for (var i = 0; i < 4; ++i) {
+			_ = tier.Allocate(5, out slab0);
+		}
+		Assert.True(slab0!.IsFull);
+		var slabCountAfterFill = tier.SlabCount;
+
+		// Inject the full slab back at the chain head — simulates the invariant violation.
+		tier.TestOnly_InjectAtChainHead(0, slab0);
+
+		// Recovery path: Allocate must detach the full head and succeed from a fresh slab.
+		var ptr = tier.Allocate(5, out var slab1);
+		Assert.NotEqual(IntPtr.Zero, ptr);
+		Assert.NotSame(slab0, slab1);
+
+		// A second allocation must not hit slab0 again (chain is clean).
+		_ = tier.Allocate(5, out var slab2);
+		Assert.NotSame(slab0, slab2);
+
+		// One extra slab allocated during recovery; slab0 removed from the active chain
+		// so subsequent allocations come from the fresh slab, not the injected full one.
+		Assert.True(tier.SlabCount > slabCountAfterFill);
+	}
 }

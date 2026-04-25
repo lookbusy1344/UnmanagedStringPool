@@ -98,7 +98,9 @@ internal sealed class SegmentedSlabTier : IDisposable
 
 		var slab = activeSlabs[sizeClass] ?? AllocateNewSlab(sizeClass);
 		if (!slab.TryAllocateCell(out var cellIndex)) {
-			// Chain-head invariant violated; recover by allocating a fresh slab.
+			// Chain-head invariant violated: the active head is full despite being on the chain.
+			// Detach it first so it doesn't re-surface on the next call, then allocate a fresh slab.
+			DetachHead(sizeClass);
 			slab = AllocateNewSlab(sizeClass);
 			_ = slab.TryAllocateCell(out cellIndex);
 		}
@@ -201,6 +203,14 @@ internal sealed class SegmentedSlabTier : IDisposable
 		for (var i = 0; i < SegmentedConstants.SlabSizeClassCount; ++i) {
 			activeSlabs[i] = null;
 		}
+	}
+
+	// Injects a slab (which may be full) at the head of the active chain for a given size class.
+	// Used only in tests to simulate a chain-head invariant violation.
+	internal void TestOnly_InjectAtChainHead(int sizeClass, SegmentedSlab slab)
+	{
+		slab.NextInClass = activeSlabs[sizeClass];
+		activeSlabs[sizeClass] = slab;
 	}
 
 	private SegmentedSlab AllocateNewSlab(int sizeClass)
