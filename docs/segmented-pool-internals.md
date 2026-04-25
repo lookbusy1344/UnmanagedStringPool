@@ -70,7 +70,7 @@ exactly one home in either a slab cell or an arena block — never both.
 
 | Word    | Layer | What it is                                                      |
 |---------|-------|-----------------------------------------------------------------|
-| **Slot**    | Index | One row of `SegmentedSlotTable`: `(Ptr, LengthChars, Generation)`. A managed indirection record that maps a handle to a raw pointer. The public handle (`PooledStringRef`) is really a slot index plus a generation number. One slot per live string. **A slot is not storage** — it points to storage in one of the two tiers below. |
+| **Slot**    | Index | One row of `SegmentedSlotTable`: `(Ptr, Owner, LengthChars, AllocatedBytes, Generation)` — 32 bytes. A managed indirection record that maps a handle to a raw pointer. `Owner` holds a reference to the owning `SegmentedSlab` or `SegmentedArenaSegment` (nulled on free so the tier object isn't kept alive by the slot table). `AllocatedBytes` records the actual arena bytes handed out, including any unsplit remainder that was absorbed rather than split off. The public handle (`PooledStringRef`) is really a slot index plus a generation number. One slot per live string. **A slot is not storage** — it points to storage in one of the two tiers below. |
 | **Slab**    | Storage | One unmanaged buffer in the slab tier, carved into fixed-size cells. Holds many strings belonging to one size class. |
 | **Cell**    | Storage | One fixed-size slice of a slab. Holds exactly one string's bytes. |
 | **Segment** | Storage | One ~1 MB unmanaged buffer in the arena tier. Holds many variable-size blocks. |
@@ -344,10 +344,15 @@ must still be locatable.
 
 ### 2.4 Pre-warming with Reserve
 
-`pool.Reserve(chars)` splits the budget between tiers and pre-allocates
-capacity. The slab tier's share triggers `AllocateNewSlab` calls for the
-largest size class (128-char cells) until enough total capacity exists.
-This avoids the first-allocation latency of creating slabs on demand.
+`pool.ReserveSmall(chars)` and `pool.ReserveLarge(chars)` pre-allocate
+capacity in each tier independently. `pool.Reserve(chars)` splits the budget
+evenly and delegates to both.
+
+For the slab tier, `ReserveSmall` distributes the budget **proportionally
+across all five size classes** (not just the largest). For each class,
+`AllocateNewSlab` is called until enough total char capacity exists for that
+class's share. This avoids the first-allocation latency of creating slabs on
+demand and ensures reserved slabs match mixed-size workloads.
 
 ### 2.5 Slab lifetime
 
@@ -440,9 +445,12 @@ size   log2  bin    covers
 ### 3.4 How segments link together
 
 The `SegmentedArenaTier` holds segments in a flat `List<SegmentedArenaSegment>`.
-When allocating, it iterates through all segments in insertion order, trying
-each one's bins and bump allocator. If none can satisfy the request, a new
-segment is appended to the list:
+When allocating, it iterates through segments in insertion order, trying each
+one's bins and bump allocator — **skipping any segment flagged `IsOversized`**.
+A segment is flagged oversized when it was created to satisfy a single request
+larger than the default segment size; skipping it prevents small subsequent
+allocations from scattering into a dedicated large-string segment. If no
+eligible segment can satisfy the request, a new segment is appended to the list:
 
 ```
 segments: List<SegmentedArenaSegment>
@@ -469,15 +477,6 @@ Like slabs, segments are **never freed** during normal operation:
 - `pool.Clear()` — resets every segment's `BumpOffset` to 0 and clears all
   bin heads, but keeps the unmanaged memory. The segments are reused.
   See §6.14 for a walkthrough.
-
-### 3.7 Dead field: `SegmentedArenaSegment.Next`
-
-The segment class declares a `Next` property (`SegmentedArenaSegment?
-Next`), but it is never read or written by any production code path. The
-arena tier uses a flat `List<SegmentedArenaSegment>` rather than a linked
-list of segments, so this field is dead code — likely a leftover from an
-earlier design that threaded segments into a chain. It has no effect on
-behaviour.
 
 ---
 
@@ -643,7 +642,9 @@ free slot : Ptr = next free slot index       (bits 0..31), bits 32..63 = 0
 
 The generation high bit (§4.2) tells you which interpretation applies
 without ambiguity. **No separate free-list array exists** — the dormant
-`Ptr` field carries the link.
+`Ptr` field carries the link. On the same free operation, `Owner` is set
+to `null` (releasing the slab/segment reference) and `AllocatedBytes` is
+zeroed; neither field is read while the slot is on the free chain.
 
 ```
 freeHead = 5
@@ -670,8 +671,14 @@ never-before-allocated index, growing the underlying array by doubling
 when `highWater` hits `Capacity`. Slots past `highWater` are always in
 their zero-initialised state.
 
-`ClearAllSlots` rebuilds the chain in one pass, threading every slot in
-index order: `freeHead = 0 → 1 → 2 → … → highWater−1 → NoFreeSlot`.
+`ClearAllSlots` resets `highWater` to 0 and sets `freeHead = NoFreeSlot`,
+then calls `MaybeShrink` to collapse the backing array toward
+`initialCapacity`. No free chain is rebuilt — subsequent `Allocate` calls
+bump from `highWater = 0` exactly as they would on a freshly-constructed
+table. `MaybeShrink` also runs after individual `Free` calls when the table
+has grown past `initialCapacity` and is sparse (ActiveCount < Capacity/4),
+halving the array until either `initialCapacity` is reached or live slot
+indices in the upper half prevent further truncation.
 
 ### 5.2 Slab chains — **five** independent lists, one per size class
 
@@ -773,20 +780,32 @@ private unsafe SegmentedFreeBlockHeader ReadHeader(int offset) =>
     *(SegmentedFreeBlockHeader*)(Buffer.ToInt64() + offset);
 ```
 
-So the same 16 bytes of a block mean wildly different things depending on
-whether that block is live or free:
+So the same bytes of a block mean wildly different things depending on
+whether that block is live or free. Every free block carries both a header
+at its start and a footer at its end:
+
+```csharp
+[StructLayout(LayoutKind.Sequential, Size = 8)]
+internal struct SegmentedFreeBlockFooter
+{
+    public int SizeBytes; // mirrors header SizeBytes so the header can be located
+    public int IsFree;    // non-zero when the block is on the free list
+}
+```
 
 ```
 live block (holds an allocated string):
-  +0  [char0][char1][char2][char3] …  — UTF-16 payload
-  (no header; length comes from the slot entry's LengthChars)
+  +0       [char0][char1][char2][char3] …  — UTF-16 payload
+           (no header or footer; length comes from the slot entry's LengthChars)
 
 free block (on a bin chain):
-  +0   SizeBytes   (int)          ┐
-  +4   NextOffset  (int, -1=tail) │  16-byte header
-  +8   PrevOffset  (int, -1=head) │
-  +12  BinIndex    (int)          ┘
-  +16  (unused but reserved as part of the block)
+  +0       SizeBytes   (int)          ┐
+  +4       NextOffset  (int, -1=tail) │  16-byte SegmentedFreeBlockHeader
+  +8       PrevOffset  (int, -1=head) │  written at the start of the block
+  +12      BinIndex    (int)          ┘
+  +16      (payload area, not read while free)
+  +size-8  SizeBytes   (int)          ┐  8-byte SegmentedFreeBlockFooter
+  +size-4  IsFree      (int, non-zero)┘  written at the tail of the block
 ```
 
 Allocating a block overwrites the header with string data. Freeing
@@ -805,25 +824,34 @@ block is oversized, the allocator splits off the `[taken | remainder]`
 tail, writes a fresh header into it, and re-links it to the head of its
 own bin (which may or may not be the original bin).
 
-Free-block coalescing happens on every `Free` call, before the new block
-is linked in:
+Free-block coalescing happens on every `Free` call via boundary-tag lookups,
+before the new block is linked in:
 
 ```csharp
 TryCoalesceForward(ref offset, ref size);    // merge with successor if free
 TryCoalesceBackward(ref offset, ref size);   // merge with predecessor if free
 ```
 
-Each helper scans all 16 bins looking for a neighbour at the right
-offset, unlinks it, and absorbs its size. This is O(total free blocks)
-per free — fine for typical workloads, and avoids the complexity of a
-sorted address index. If it ever showed up as a hotspot, an
-offset-indexed map per segment would be the obvious fix.
+**Forward coalescing** reads the header at `offset + size` directly — the
+successor block (if any) always starts at that exact offset. A guard call to
+`IsInBin(successorOffset, hdr.BinIndex)` confirms the header is live free-list
+data rather than stale live-block content; `IsInBin` walks only the specific
+bin, so the cost is O(blocks in that bin) in the pathological case.
 
-Why *this* list is doubly-linked (unlike the slab chain): arbitrary
-mid-list blocks get unlinked during allocation (remove the selected
-block), during split (remove and re-bin), and during coalescing (remove
-the neighbour). A `PrevOffset` makes each unlink O(1) without walking
-the chain.
+**Backward coalescing** reads the 8-byte `SegmentedFreeBlockFooter` at
+`offset − 8`. If `footer.IsFree != 0`, it uses `footer.SizeBytes` to compute
+`predOffset = offset − footer.SizeBytes` and reads the predecessor's header
+there for a cross-check. Only if both agree does it unlink and absorb. This
+is O(1): no bin scan, no list walk.
+
+The boundary-tag footer costs 8 bytes at the tail of every free block,
+embedded in the free memory itself. In-use blocks do not carry a footer —
+the `IsFree` flag distinguishes stale footer data from a now-live block.
+
+Why *this* list is doubly-linked (unlike the slab chain): arbitrary mid-list
+blocks get unlinked during allocation (remove the selected block), during
+split (remove and re-bin), and during coalescing (remove the neighbour). A
+`PrevOffset` makes each unlink O(1) without walking the chain.
 
 ---
 
@@ -1244,13 +1272,12 @@ ref.Dispose()   // ref points to slot 2, which holds the doc
      │   │
      │   │  Try coalescing with neighbours
      │   ├─ TryCoalesceForward(ref offset=0, ref size=10000)
-     │   │   ├─ successor would be at offset 0 + 10000 = 10000
-     │   │   ├─ 10000 >= BumpOffset(10000) → nothing beyond the bump
+     │   │   ├─ successorOffset = 0 + 10000 = 10000
+     │   │   ├─ 10000 >= BumpOffset(10000) → at bump boundary, no successor
      │   │   └─ no coalescing
      │   │
      │   ├─ TryCoalesceBackward(ref offset=0, ref size=10000)
-     │   │   ├─ looking for a free block X where X.offset + X.size == 0
-     │   │   ├─ scan all 16 bins → nothing ends at offset 0
+     │   │   ├─ offset (0) < footerSize (8) → cannot have a predecessor
      │   │   └─ no coalescing
      │   │
      │   │  Write free-block header into the freed memory
@@ -1315,14 +1342,15 @@ binHeads[0…15] = -1  (no free blocks)
 ```
 Free B (2,048 B at offset 1024)
  │
- ├─ TryCoalesceForward: is there a free block at 1024 + 2048 = 3072?
- │   └─ scan all bins → no free block at offset 3072 → nothing
+ ├─ TryCoalesceForward: read header at successorOffset = 1024 + 2048 = 3072
+ │   └─ 3072 < BumpOffset(3584) ✓. Header at 3072 is C (live); IsInBin returns false → nothing
  │
- ├─ TryCoalesceBackward: is there a free block ending at 1024?
- │   └─ scan all bins → no block X where X.offset + X.size == 1024 → nothing
+ ├─ TryCoalesceBackward: read footer at offset 1024 − 8 = 1016
+ │   └─ footer.IsFree = 0 (A is live) → nothing
  │
  ├─ WriteHeader(1024, { SizeBytes=2048, BinIndex=Log2(2048)-4=11-4=7 })
  └─ LinkIntoBin(1024) → binHeads[7] = 1024
+        also writes footer at 1024 + 2048 − 8 = 3064: { SizeBytes=2048, IsFree=1 }
 
  ┌──────────────┬──────────────────┬────────────┬───────────────────┐
  │ A (1,024 B)  │ B FREE (2,048 B) │ C (512 B)  │ (unused)          │
@@ -1336,16 +1364,18 @@ Free B (2,048 B at offset 1024)
 ```
 Free A (1,024 B at offset 0)
  │
- ├─ TryCoalesceForward: is there a free block at 0 + 1024 = 1024?
- │   ├─ scan bins → found! B is at offset 1024 in bin 7
- │   ├─ UnlinkFromBin(1024)  →  binHeads[7] = -1  (B removed)
+ ├─ TryCoalesceForward: read header at successorOffset = 0 + 1024 = 1024
+ │   ├─ 1024 < BumpOffset(3584) ✓. Header at 1024: { SizeBytes=2048, BinIndex=7 }
+ │   ├─ IsInBin(1024, 7) → binHeads[7]=1024, found ✓
+ │   ├─ UnlinkFromBin(1024) → binHeads[7] = -1  (B removed; footer at 3064 marked in-use)
  │   └─ size = 1024 + 2048 = 3072  (A absorbs B)
  │
- ├─ TryCoalesceBackward: is there a free block ending at 0?
- │   └─ nothing ends at offset 0 → no
+ ├─ TryCoalesceBackward: read footer at offset 0 − 8
+ │   └─ offset (0) < footerSize (8) → cannot have a predecessor
  │
  ├─ WriteHeader(0, { SizeBytes=3072, BinIndex=Log2(3072)-4=11-4=7 })
  └─ LinkIntoBin(0) → binHeads[7] = 0
+        writes footer at 0 + 3072 − 8 = 3064: { SizeBytes=3072, IsFree=1 }
 
  ┌─────────────────────────────────┬────────────┬───────────────────┐
  │ A+B COALESCED FREE (3,072 B)    │ C (512 B)  │ (unused)          │
@@ -1362,13 +1392,15 @@ Free A (1,024 B at offset 0)
 ```
 Free C (512 B at offset 3072)
  │
- ├─ TryCoalesceForward: is there a free block at 3072 + 512 = 3584?
- │   └─ 3584 >= BumpOffset(3584) → past the bump, nothing there
+ ├─ TryCoalesceForward: successorOffset = 3072 + 512 = 3584
+ │   └─ 3584 >= BumpOffset(3584) → at bump boundary, no successor
  │
- ├─ TryCoalesceBackward: is there a free block ending at 3072?
- │   ├─ scan bins → found! A+B at offset 0, size 3072
- │   │   0 + 3072 == 3072 ✓
- │   ├─ UnlinkFromBin(0)  →  binHeads[7] = -1  (A+B removed)
+ ├─ TryCoalesceBackward: read footer at offset 3072 − 8 = 3064
+ │   ├─ footer = { SizeBytes=3072, IsFree=1 } ← written when A+B was linked in
+ │   ├─ predOffset = 3072 − 3072 = 0
+ │   ├─ read header at 0: { SizeBytes=3072, BinIndex=7 }
+ │   ├─ IsInBin(0, 7) → binHeads[7]=0, found ✓ (cross-check passes)
+ │   ├─ UnlinkFromBin(0) → binHeads[7] = -1  (A+B removed)
  │   ├─ offset = 0  (adopt A+B's starting offset)
  │   └─ size = 3072 + 512 = 3584  (everything merged)
  │
@@ -1534,23 +1566,30 @@ pool.Clear()
  │
  ├─ slots.ClearAllSlots()
  │   │
- │   │  Walk slots[0…59] (everything below highWater):
+ │   │  Walk slots[0…59] (everything below highWater, skipped if ActiveCount=0):
  │   ├─ for each slot:
  │   │   ├─ if live → MarkFreeAndBumpGen (set free flag, bump counter)
  │   │   ├─ if already freed → leave generation as-is
- │   │   ├─ slot.Ptr = next index (i+1), or NoFreeSlot for the last one
- │   │   └─ slot.LengthChars = 0
+ │   │   ├─ slot.Ptr = default, slot.LengthChars = 0
+ │   │   ├─ slot.Owner = null        ← release slab/segment reference
+ │   │   └─ slot.AllocatedBytes = 0
  │   │
- │   │  Rebuild the free chain in index order:
- │   ├─ freeHead = 0
- │   ├─ slot[0].Ptr → 1 → slot[1].Ptr → 2 → … → slot[59].Ptr → 0xFFFFFFFF
+ │   │  Reset indices (no free chain rebuild — Allocate bumps from highWater=0):
+ │   ├─ highWater = 0
+ │   ├─ freeHead = NoFreeSlot
  │   └─ activeCount = 0
+ │   │
+ │   │  MaybeShrink() — collapse the slot array toward initialCapacity
+ │   └─ while slots.Length > initialCapacity && highWater(0) ≤ slots.Length/2:
+ │         Array.Resize(ref slots, max(initialCapacity, slots.Length/2))
+ │         repeat until initialCapacity reached
  │
- │      Slot free chain after:
- │      freeHead ──→ 0 ──→ 1 ──→ 2 ──→ … ──→ 59 ──→ 0xFFFFFFFF
- │      highWater = 60 (unchanged — doesn't shrink)
- │      Every slot has its free flag set. All old PooledStringRefs are now
- │      stale — their generation will mismatch on any read attempt.
+ │      Slot table after:
+ │      slots array: shrunk back to initialCapacity (e.g. 64 entries)
+ │      highWater = 0,  freeHead = NoFreeSlot
+ │      Every old PooledStringRef is now stale — their generations have the
+ │      free flag set and will mismatch on any read attempt.
+ │      The next Allocate bumps from highWater=0, just like a fresh pool.
  │
  │  ── STEP 2: Reset slab tier ──
  │
@@ -1617,7 +1656,7 @@ pool.Clear()
 
 | | `Clear()` | `Dispose()` |
 |-|-----------|-------------|
-| Slots | All marked freed, chain rebuilt | All marked freed, chain rebuilt |
+| Slots | All marked freed; `highWater → 0`; array shrunk to `initialCapacity` | All marked freed |
 | Slab bitmaps | Reset to all-free | Not explicitly reset |
 | Slab memory | **Kept** — buffers reused | **Freed** via `Marshal.FreeHGlobal` |
 | Arena bumps/bins | Reset to zero | Not explicitly reset |
@@ -1636,8 +1675,10 @@ singleton `PooledStringRef.Empty`. No slot is consumed, no cell allocated,
 no block reserved — both tiers only ever see non-empty inputs.
 
 `PooledStringRef.Empty` is `default(PooledStringRef)`: `Pool = null`,
-`SlotIndex = 0`, `Generation = 0`. Its `IsEmpty` check is `Pool is null &&
-SlotIndex == 0 && Generation == 0`.
+`SlotIndex = 0`, `Generation = 0`. Its `IsEmpty` check is `Pool is null`.
+Every real `Allocate` call bumps `Generation` to at least 1 before returning,
+so a non-null `Pool` is sufficient to distinguish any live ref from the sentinel;
+the `SlotIndex` and `Generation` fields need not be checked.
 
 Calling `Dispose()` on `Empty` calls `Pool?.FreeSlot(...)` → `Pool` is
 null → no-op. Safe to dispose multiple times or never.
@@ -1653,8 +1694,9 @@ null → no-op. Safe to dispose multiple times or never.
 | Tier tag in pointer           | 1 bit of existing 64-bit ptr       | O(1) mask                      |
 | Slab cell bitmap              | 1 bit per cell, managed array      | O(1) `tzcnt` per allocate      |
 | Slab size-class chains (×5)   | 5 head pointers + `NextInClass`    | O(1) head check, O(1) re-link  |
-| Arena free-block header       | 16 bytes inside freed memory       | O(1) link/unlink               |
-| Arena bin heads               | `int[16]` per segment              | O(blocks in bin) per allocate  |
+| Arena free-block header       | 16 bytes inside freed memory (head) | O(1) link/unlink              |
+| Arena free-block footer       | 8 bytes inside freed memory (tail)  | O(1) backward coalescing      |
+| Arena bin heads               | `int[16]` per segment               | O(blocks in bin) per allocate |
 
 Every "extra" data structure either reuses bits/bytes already present or
 is a fixed-size managed array. Steady-state allocation performs zero
