@@ -45,7 +45,7 @@ The pool approach makes one (or a few) large unmanaged allocations and hands out
 
 1. **Slot table** — managed `SlotEntry[]` indexed by handle; the only managed array that scales with live-string count. A generation counter on each slot, with the high bit doubling as a freed flag, prevents use-after-free without exhausting allocation IDs.
 2. **Slab tier** — strings ≤128 chars route to fixed-size-class slabs (8/16/32/64/128 chars). Each slab tracks cell occupancy via a bitmap (`1 = free`) so `BitOperations.TrailingZeroCount` returns the next free cell in a single x86 instruction. Slabs in each size class are threaded into an intrusive linked list via `NextInClass`; allocation and free are O(1).
-3. **Arena tier** — strings >128 chars go into bump-allocated 1 MB segments with coalesced free-block bins. Free-block headers (`size`, `next`, `prev`, `bin`) live **inside** the freed unmanaged memory itself — no managed allocation for the free list at all.
+3. **Arena tier** — strings >128 chars go into bump-allocated 1 MB segments with O(1) coalescing via boundary tags. Free-block headers (`size`, `next`, `prev`, `bin`) live **inside** the freed unmanaged memory itself — no managed allocation for the free list at all.
 
 Steady-state result: zero managed allocation per string, no in-place defragmentation (segments grow by appending, not by copying), and a 16-byte `PooledStringRef` handle (pool reference + slot index + generation) instead of `PooledString`'s 12-byte allocation-id reference.
 
@@ -217,22 +217,22 @@ The architectural differences that make this possible:
 
 ### Use plain managed strings when:
 
-- Strings are short (≤ ~32 chars) and you are not dominated by GC pauses. Managed is 2–4× faster than either pool at 8 chars, with no added complexity.
+- Strings are short (≤ ~32 chars) and you are not dominated by GC pauses. Managed is 2–6× faster than either pool at 8 chars depending on access pattern (bulk: 2–4×; interleaved churn: ~5.5–6.6×), with no added complexity.
 - Allocation rate is low. Pool overhead only pays off under sustained high-throughput pressure.
 - You need string interning, `Dictionary` keys, or any API that only accepts a `string`. Calling `.ToString()` on a pooled string allocates a managed string on the heap — if your consumption points can't accept `ReadOnlySpan<char>`, the pool savings are largely erased.
 
 ### Use the Legacy pool (`UnmanagedStringPool`) when:
 
-- Strings are large (256+ chars) **and** the dominant pattern is bulk allocate-then-free (not continuous churn). This is the only scenario where a pool is both faster and cheaper than managed: ~19% faster throughput at N=10,000 with 92% less managed allocation.
+- Strings are large (256+ chars) **and** the dominant pattern is bulk allocate-then-free (not continuous churn). This is the only scenario where a pool is faster than managed: ~16% faster throughput at N=10,000 with 92% less managed allocation.
 - Raw throughput is the priority and GC pauses are already acceptable. Legacy's contiguous block layout has the lowest per-access overhead when string data dominates bookkeeping.
 
 ### Use the Segmented pool (`SegmentedStringPool`) when:
 
 - The workload involves **continuous churn** — strings are allocated and freed throughout the operation rather than in two distinct phases. Segmented's slab/arena tiers recycle cells without any managed allocation, producing zero Gen0 collections in the interleaved benchmark regardless of string size or N.
-- String sizes are **mixed or unpredictable**. Legacy is catastrophic for small strings under churn (6.7× slower, creates *more* managed allocation than baseline); Segmented is only 2× slower and still allocates nothing.
-- You cannot easily characterise your workload. Segmented's worst case (~1.4–1.6× slower than managed) is far less damaging than Legacy's worst case (small-string churn, 6.7× slower with 2.2× more managed allocation).
+- String sizes are **mixed or unpredictable**. Legacy is catastrophic for small strings under churn (6.6× slower, creates *more* managed allocation than baseline); Segmented is 5.5× slower at worst but still allocates nothing.
+- You cannot easily characterise your workload. Segmented's worst case (5.5× slower for small-string interleaved churn, zero managed allocation) is still better than Legacy's worst case (small-string churn, 6.6× slower with 2.2× more managed allocation). The throughput gap between them has narrowed; the allocation gap has not.
 
-**Important caveat — Segmented is never faster than managed strings in isolation.** The best case is 1.07× slower (large strings, bulk, N=10,000). The benefit is GC pause elimination: at N=10,000 interleaved, managed strings trigger ~640 Gen0 collections per iteration; Segmented triggers zero. Gen0 is fast but not free — under concurrent load those stop-the-world pauses compound. In a latency-sensitive application (request handling, game loop, real-time processing) where string allocation is a meaningful fraction of the work, removing those pauses can improve end-to-end throughput even though individual `Allocate` calls are slower. If GC pauses are not visible in your latency profile, plain managed strings are the right choice. Note also that for small-string (8-char) interleaved churn, Segmented has regressed to ~5.5× slower than managed (while still producing zero managed allocation); at that point managed strings are the throughput-optimal choice unless eliminating Gen0 is the explicit goal.
+**Important caveat — Segmented is never faster than managed strings in isolation.** The best case is 1.07× slower (large strings, bulk, N=10,000). The benefit is GC pause elimination: at N=10,000 interleaved, managed strings trigger ~640 Gen0 collections per iteration; Segmented triggers zero. Gen0 is fast but not free — under concurrent load those stop-the-world pauses compound. In a latency-sensitive application (request handling, game loop, real-time processing) where string allocation is a meaningful fraction of the work, removing those pauses can improve end-to-end throughput even though individual `Allocate` calls are slower. If GC pauses are not visible in your latency profile, plain managed strings are the right choice. Note also that for small-string (8-char) interleaved churn, Segmented has regressed to ~5.5× slower than managed (while still producing zero managed allocation). The cause is the slot-entry widening from 16 to 32 bytes (which added `Owner` and `ActualBytes` fields for correctness); for 8-char strings the slab bitmap lookup is fast enough that slot-table cache pressure now dominates the hot free→alloc cycle. At this operating point managed strings are the throughput-optimal choice unless eliminating Gen0 is the explicit goal.
 
 ### Summary
 
