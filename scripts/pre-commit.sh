@@ -33,40 +33,42 @@ requires_dotnet_checks() {
 }
 
 main() {
-  local staged_files=()
-  local staged_file
+  local changed_files=()
+  local changed_file
 
-  # Bash 3 on macOS does not provide mapfile, so collect staged paths manually.
-  while IFS= read -r staged_file; do
-    staged_files+=("$staged_file")
-  done < <(git diff --cached --name-only --diff-filter=ACMR)
+  # Bash 3 on macOS does not provide mapfile, so collect paths manually.
+  # Use git diff HEAD (staged + unstaged) so a dirty working tree can't slip
+  # past the trigger when only unrelated files are staged.
+  while IFS= read -r changed_file; do
+    changed_files+=("$changed_file")
+  done < <(git diff HEAD --name-only --diff-filter=ACMR)
 
-  if [[ "${#staged_files[@]}" -eq 0 ]]; then
-    echo "No staged files found."
+  if [[ "${#changed_files[@]}" -eq 0 ]]; then
+    echo "No changed files found."
     exit 0
   fi
 
   local has_non_documentation_files="false"
   local has_dotnet_files="false"
 
-  for staged_file in "${staged_files[@]}"; do
-    if ! is_documentation_file "$staged_file"; then
+  for changed_file in "${changed_files[@]}"; do
+    if ! is_documentation_file "$changed_file"; then
       has_non_documentation_files="true"
     fi
 
-    if requires_dotnet_checks "$staged_file"; then
+    if requires_dotnet_checks "$changed_file"; then
       has_dotnet_files="true"
     fi
   done
 
   if [[ "$has_non_documentation_files" == "false" ]]; then
-    echo "Documentation-only commit detected. Skipping .NET checks."
+    echo "Documentation-only changes detected. Skipping .NET checks."
     exit 0
   fi
 
-  # Non-doc changes still skip the expensive checks unless .NET-relevant files are staged.
+  # Non-doc changes still skip the expensive checks unless .NET-relevant files changed.
   if [[ "$has_dotnet_files" == "false" ]]; then
-    echo "No staged .NET source or build files detected. Skipping .NET checks."
+    echo "No .NET source or build files changed. Skipping .NET checks."
     exit 0
   fi
 
