@@ -6,7 +6,7 @@
 #       exit 1
 #   fi
 #
-#   ./scripts/pre-commit.sh
+#   exec ./scripts/pre-commit.sh
 
 set -euo pipefail
 
