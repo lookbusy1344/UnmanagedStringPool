@@ -315,7 +315,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	// Used as a consistency guard after reading boundary-tag data.
 	private bool IsInBin(int offset, int binIndex)
 	{
-		if ((uint)binIndex >= (uint)SegmentedConstants.ArenaBinCount) {
+		if ((uint)binIndex >= SegmentedConstants.ArenaBinCount) {
 			return false;
 		}
 

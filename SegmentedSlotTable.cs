@@ -128,7 +128,7 @@ internal sealed class SegmentedSlotTable
 					slot.Generation = SegmentedSlotEntry.MarkFreeAndBumpGen(slot.Generation);
 				}
 
-				slot.Ptr = default;
+				slot.Ptr = 0;
 				slot.LengthChars = 0;
 				slot.Owner = null;
 				slot.AllocatedBytes = 0;
