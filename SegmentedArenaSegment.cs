@@ -88,7 +88,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	public bool TryAllocate(int byteCount, out IntPtr ptr, out int actualBytes)
 	{
 		ObjectDisposedException.ThrowIf(disposed, this);
-		var size = AlignSize(byteCount);
+		var size = NormalizeAllocationBytes(byteCount);
 		var startBin = BinIndexForSize(size);
 		for (var b = startBin; b < SegmentedConstants.ArenaBinCount; ++b) {
 			var head = binHeads[b];
@@ -120,7 +120,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		}
 
 		// Bump fallback: carve from the never-yet-used tail of the buffer.
-		if (BumpOffset + size <= Capacity) {
+		if ((long)BumpOffset + size <= Capacity) {
 			ptr = new(Buffer.ToInt64() + BumpOffset);
 			BumpOffset += size;
 			actualBytes = size;
@@ -140,7 +140,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	{
 		ObjectDisposedException.ThrowIf(disposed, this);
 		var offset = (int)(ptr.ToInt64() - Buffer.ToInt64());
-		var size = AlignSize(byteCount);
+		var size = NormalizeAllocationBytes(byteCount);
 		TryCoalesceForward(ref offset, ref size);
 		TryCoalesceBackward(ref offset, ref size);
 		WriteHeader(offset, new() { SizeBytes = size, NextOffset = -1, PrevOffset = -1, BinIndex = BinIndexForSize(size) });
@@ -180,10 +180,15 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	private static int AlignSize(int size)
+	internal static int NormalizeAllocationBytes(int byteCount)
 	{
-		const int alignment = SegmentedConstants.PtrAlignment;
-		return size < SegmentedConstants.MinArenaBlockBytes ? SegmentedConstants.MinArenaBlockBytes : (size + (alignment - 1)) & ~(alignment - 1);
+		ArgumentOutOfRangeException.ThrowIfNegative(byteCount);
+		const int alignment = SegmentedConstants.ArenaAllocationAlignment;
+		if (byteCount < SegmentedConstants.MinArenaBlockBytes) {
+			return SegmentedConstants.MinArenaBlockBytes;
+		}
+
+		return checked((byteCount + (alignment - 1)) & ~(alignment - 1));
 	}
 
 	// Maps block size to bin index via Log2(size) − 4.

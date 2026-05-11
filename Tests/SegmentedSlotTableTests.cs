@@ -126,6 +126,35 @@ public sealed class SegmentedSlotTableTests
 	}
 
 	[Fact]
+	public void Free_AtGenerationExhaustion_RetiresSlot()
+	{
+		var table = new SegmentedSlotTable(4);
+		var (slot, gen) = table.Allocate((IntPtr)0x100, 1, null, 0);
+		ref var entry = ref table.SlotRef(slot);
+		entry.Generation = SegmentedConstants.GenerationMask;
+
+		Assert.True(table.Free(slot, SegmentedConstants.GenerationMask));
+		Assert.True(entry.Retired);
+		Assert.False(table.TryReadSlot(slot, SegmentedConstants.GenerationMask, out _));
+		Assert.Equal(0, table.ActiveCount);
+	}
+
+	[Fact]
+	public void Allocate_AfterRetirement_DoesNotReuseRetiredSlot()
+	{
+		var table = new SegmentedSlotTable(2);
+		var (slot0, _) = table.Allocate((IntPtr)0x100, 1, null, 0);
+		ref var entry = ref table.SlotRef(slot0);
+		entry.Generation = SegmentedConstants.GenerationMask;
+
+		Assert.True(table.Free(slot0, SegmentedConstants.GenerationMask));
+
+		var (slot1, _) = table.Allocate((IntPtr)0x200, 2, null, 0);
+		Assert.NotEqual(slot0, slot1);
+		Assert.True(table.SlotRef(slot0).Retired);
+	}
+
+	[Fact]
 	public void Allocate_BeyondInitialCapacity_Grows()
 	{
 		var table = new SegmentedSlotTable(initialCapacity: 4);
@@ -208,5 +237,36 @@ public sealed class SegmentedSlotTableTests
 			_ = table.Free(slot, gen);
 		}
 		Assert.Equal(peakCapacity, table.Capacity);
+	}
+
+	[Fact]
+	public void MarkFreeAndBumpGen_AtMax_ThrowsOverflowException()
+	{
+		_ = Assert.Throws<OverflowException>(() => SegmentedSlotEntry.MarkFreeAndBumpGen(SegmentedConstants.GenerationMask));
+	}
+
+	[Fact]
+	public void TryMarkFreeAndBumpGen_AtMax_ReturnsFalse()
+	{
+		Assert.False(SegmentedSlotEntry.TryMarkFreeAndBumpGen(SegmentedConstants.GenerationMask, out _));
+	}
+
+	[Fact]
+	public void StaleHandle_DoesNotBecomeValidAfterGenerationExhaustion()
+	{
+		using var pool = new SegmentedStringPool(new(InitialSlotCapacity: 2, SmallStringThresholdChars: 0));
+		var original = pool.Allocate("hi");
+		var slotsField = typeof(SegmentedStringPool).GetField("slots", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+		Assert.NotNull(slotsField);
+		var slots = (SegmentedSlotTable)slotsField!.GetValue(pool)!;
+		ref var entry = ref slots.SlotRef(original.SlotIndex);
+		entry.Generation = SegmentedConstants.GenerationMask;
+
+		var exhaustedHandle = new PooledStringRef(pool, original.SlotIndex, SegmentedConstants.GenerationMask);
+		exhaustedHandle.Free();
+		_ = pool.Allocate("there");
+
+		_ = Assert.Throws<InvalidOperationException>(() => original.AsSpan().Length);
+		Assert.True(slots.SlotRef(original.SlotIndex).Retired);
 	}
 }

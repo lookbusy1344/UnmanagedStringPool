@@ -2,6 +2,7 @@ namespace LookBusy.Test;
 
 using System;
 using System.Buffers;
+using System.Reflection;
 using LookBusy;
 using Xunit;
 
@@ -46,6 +47,25 @@ public sealed class PooledStringRefTests
 		finally {
 			r.Free();
 		}
+	}
+
+	[Fact]
+	public void StaleHandle_DoesNotBecomeValidAfterGenerationExhaustion()
+	{
+		using var pool = new SegmentedStringPool(new(InitialSlotCapacity: 1, SmallStringThresholdChars: 0));
+		var handle = pool.Allocate("hello");
+		var slotsField = typeof(SegmentedStringPool).GetField("slots", BindingFlags.Instance | BindingFlags.NonPublic);
+		Assert.NotNull(slotsField);
+		var slots = (SegmentedSlotTable)slotsField!.GetValue(pool)!;
+		ref var entry = ref slots.SlotRef(handle.SlotIndex);
+		entry.Generation = SegmentedConstants.GenerationMask;
+
+		var exhaustedHandle = new PooledStringRef(pool, handle.SlotIndex, SegmentedConstants.GenerationMask);
+		exhaustedHandle.Free();
+		_ = pool.Allocate("world");
+
+		_ = Assert.Throws<InvalidOperationException>(() => handle.AsSpan().Length);
+		Assert.True(slots.SlotRef(handle.SlotIndex).Retired);
 	}
 }
 

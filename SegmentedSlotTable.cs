@@ -33,22 +33,38 @@ internal sealed class SegmentedSlotTable
 	public (uint SlotIndex, uint Generation) Allocate(IntPtr ptr, int lengthChars, object? owner, int allocatedBytes)
 	{
 		uint slotIndex;
-		if (freeHead != SegmentedConstants.NoFreeSlot) {
-			// Reuse a previously-freed slot: pop the head of the intrusive free chain.
-			// The slot's Ptr field currently stores the next-free-slot index.
-			slotIndex = freeHead;
-			freeHead = (uint)slots[slotIndex].Ptr.ToInt64();
-		} else {
-			if (highWater == slots.Length) {
-				Grow();
+		while (true) {
+			if (freeHead != SegmentedConstants.NoFreeSlot) {
+				// Reuse a previously-freed slot: pop the head of the intrusive free chain.
+				// The slot's Ptr field currently stores the next-free-slot index.
+				slotIndex = freeHead;
+				ref var candidate = ref slots[slotIndex];
+				freeHead = (uint)candidate.Ptr.ToInt64();
+				if (candidate.Retired) {
+					continue;
+				}
+			} else {
+				while (highWater < slots.Length && slots[highWater].Retired) {
+					++highWater;
+				}
+
+				if (highWater == slots.Length) {
+					Grow();
+				}
+
+				slotIndex = (uint)highWater;
+				++highWater;
 			}
 
-			slotIndex = (uint)highWater;
-			++highWater;
+			break;
 		}
 
 		ref var slot = ref slots[slotIndex];
-		var newGen = SegmentedSlotEntry.ClearFreeAndBumpGen(slot.Generation);
+		if (!SegmentedSlotEntry.TryClearFreeAndBumpGen(slot.Generation, out var newGen)) {
+			slot.Retired = true;
+			throw new InvalidOperationException("Retired slots cannot be reallocated");
+		}
+
 		slot.Ptr = ptr;
 		slot.LengthChars = lengthChars;
 		slot.Owner = owner;
@@ -78,7 +94,20 @@ internal sealed class SegmentedSlotTable
 			return false;
 		}
 
-		var bumped = SegmentedSlotEntry.MarkFreeAndBumpGen(slot.Generation);
+		if (slot.Retired) {
+			return false;
+		}
+
+		if (!SegmentedSlotEntry.TryMarkFreeAndBumpGen(slot.Generation, out var bumped)) {
+			slot.Ptr = 0;
+			slot.LengthChars = 0;
+			slot.Owner = null;
+			slot.AllocatedBytes = 0;
+			slot.Retired = true;
+			--ActiveCount;
+			return true;
+		}
+
 		// Repurpose Ptr to store the next-free-slot index; the real pointer is no longer needed.
 		slot.Ptr = new(freeHead);
 		slot.LengthChars = 0;
@@ -103,7 +132,7 @@ internal sealed class SegmentedSlotTable
 		}
 
 		entry = slots[slotIndex];
-		if (entry.Generation == generation) {
+		if (!entry.Retired && entry.Generation == generation) {
 			return true;
 		}
 
@@ -124,8 +153,20 @@ internal sealed class SegmentedSlotTable
 		if (ActiveCount > 0) {
 			for (var i = 0; i < highWater; ++i) {
 				ref var slot = ref slots[i];
+				if (slot.Retired) {
+					slot.Ptr = 0;
+					slot.LengthChars = 0;
+					slot.Owner = null;
+					slot.AllocatedBytes = 0;
+					continue;
+				}
+
 				if (!SegmentedSlotEntry.IsFree(slot.Generation)) {
-					slot.Generation = SegmentedSlotEntry.MarkFreeAndBumpGen(slot.Generation);
+					if (SegmentedSlotEntry.TryMarkFreeAndBumpGen(slot.Generation, out var bumped)) {
+						slot.Generation = bumped;
+					} else {
+						slot.Retired = true;
+					}
 				}
 
 				slot.Ptr = 0;

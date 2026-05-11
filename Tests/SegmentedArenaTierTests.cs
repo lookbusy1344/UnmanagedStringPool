@@ -1,6 +1,8 @@
 namespace LookBusy.Test;
 
 using System;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using LookBusy;
 using Xunit;
 
@@ -41,6 +43,31 @@ public sealed class SegmentedArenaTierTests : IDisposable
 	}
 
 	[Fact]
+	public void Allocate_OversizedUnalignedRequest_CreatesAlignedCapacitySegment()
+	{
+		using var customTier = new SegmentedArenaTier(segmentBytes: 16);
+
+		_ = customTier.Allocate(17, out var seg, out var allocatedBytes);
+
+		Assert.NotNull(seg);
+		Assert.Equal(24, seg.Capacity);
+		Assert.Equal(24, allocatedBytes);
+	}
+
+	[Fact]
+	public void Allocate_UnalignedOversizedRequest_ReturnsNonZeroPointer()
+	{
+		using var customTier = new SegmentedArenaTier(segmentBytes: 16);
+
+		var ptr = customTier.Allocate(17, out var seg, out var allocatedBytes);
+
+		Assert.NotEqual(IntPtr.Zero, ptr);
+		Assert.NotNull(seg);
+		Assert.Equal(24, seg.Capacity);
+		Assert.Equal(24, allocatedBytes);
+	}
+
+	[Fact]
 	public void Free_ReturnsBlockToOwningSegment()
 	{
 		var ptr = tier.Allocate(1024, out var seg, out var actual);
@@ -56,6 +83,27 @@ public sealed class SegmentedArenaTierTests : IDisposable
 		for (var i = 0; i < 10; ++i) { _ = tier.Allocate(1024, out _, out _); }
 		var found = tier.LocateSegmentByPointer(ptr1);
 		Assert.Same(s1, found);
+	}
+
+	[Fact]
+	public void Reserve_TotalBytesOverflow_UsesLongArithmetic()
+	{
+		var customTier = new SegmentedArenaTier(segmentBytes: 16);
+		try {
+			var segmentsField = typeof(SegmentedArenaTier).GetField("segments", BindingFlags.Instance | BindingFlags.NonPublic);
+			Assert.NotNull(segmentsField);
+			var segments = (System.Collections.Generic.List<SegmentedArenaSegment>)segmentsField!.GetValue(customTier)!;
+			segments.Clear();
+			segments.Add(CreateFakeSegment(int.MaxValue - 8));
+			segments.Add(CreateFakeSegment(16));
+
+			customTier.Reserve(1);
+
+			Assert.Equal(2, customTier.SegmentCount);
+		}
+		finally {
+			customTier.Dispose();
+		}
 	}
 
 	// P2-8: oversized segments are skipped for normal requests
@@ -97,5 +145,13 @@ public sealed class SegmentedArenaTierTests : IDisposable
 		Assert.False(oversized.Contains(normal));
 		_ = normal; // suppress unused warning
 		_ = oversizedPtr;
+	}
+
+	private static SegmentedArenaSegment CreateFakeSegment(int capacity)
+	{
+		var segment = (SegmentedArenaSegment)RuntimeHelpers.GetUninitializedObject(typeof(SegmentedArenaSegment));
+		typeof(SegmentedArenaSegment).GetField("Capacity", BindingFlags.Instance | BindingFlags.Public)!
+			.SetValue(segment, capacity);
+		return segment;
 	}
 }
