@@ -46,7 +46,8 @@ internal sealed class SegmentedArenaTier : IDisposable
 	public IntPtr Allocate(int byteCount, out SegmentedArenaSegment owningSegment, out int allocatedBytes)
 	{
 		ObjectDisposedException.ThrowIf(disposed, this);
-		var isOversizedRequest = byteCount > defaultSegmentBytes;
+		var normalizedByteCount = SegmentedArenaSegment.NormalizeAllocationBytes(byteCount);
+		var isOversizedRequest = normalizedByteCount > defaultSegmentBytes;
 		foreach (var s in segments) {
 			// Skip dedicated oversized segments for normal requests — mixing small and large
 			// allocations into an oversized segment defeats its "dedicated" purpose and causes
@@ -55,7 +56,7 @@ internal sealed class SegmentedArenaTier : IDisposable
 				continue;
 			}
 
-			if (!s.TryAllocate(byteCount, out var ptr, out var actual)) {
+			if (!s.TryAllocate(normalizedByteCount, out var ptr, out var actual)) {
 				continue;
 			}
 
@@ -64,10 +65,12 @@ internal sealed class SegmentedArenaTier : IDisposable
 			return ptr;
 		}
 
-		var capacity = Math.Max(defaultSegmentBytes, byteCount);
+		var capacity = Math.Max(defaultSegmentBytes, normalizedByteCount);
 		var segment = new SegmentedArenaSegment(capacity) { IsOversized = isOversizedRequest };
 		segments.Add(segment);
-		_ = segment.TryAllocate(byteCount, out var newPtr, out allocatedBytes);
+		if (!segment.TryAllocate(normalizedByteCount, out var newPtr, out allocatedBytes)) {
+			throw new InvalidOperationException("Fresh arena segment could not satisfy the requested allocation");
+		}
 		owningSegment = segment;
 		return newPtr;
 	}

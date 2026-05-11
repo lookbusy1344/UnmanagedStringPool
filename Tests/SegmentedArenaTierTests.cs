@@ -41,6 +41,31 @@ public sealed class SegmentedArenaTierTests : IDisposable
 	}
 
 	[Fact]
+	public void Allocate_OversizedUnalignedRequest_CreatesAlignedCapacitySegment()
+	{
+		using var customTier = new SegmentedArenaTier(segmentBytes: 16);
+
+		_ = customTier.Allocate(17, out var seg, out var allocatedBytes);
+
+		Assert.NotNull(seg);
+		Assert.Equal(24, seg.Capacity);
+		Assert.Equal(24, allocatedBytes);
+	}
+
+	[Fact]
+	public void Allocate_UnalignedOversizedRequest_ReturnsNonZeroPointer()
+	{
+		using var customTier = new SegmentedArenaTier(segmentBytes: 16);
+
+		var ptr = customTier.Allocate(17, out var seg, out var allocatedBytes);
+
+		Assert.NotEqual(IntPtr.Zero, ptr);
+		Assert.NotNull(seg);
+		Assert.Equal(24, seg.Capacity);
+		Assert.Equal(24, allocatedBytes);
+	}
+
+	[Fact]
 	public void Free_ReturnsBlockToOwningSegment()
 	{
 		var ptr = tier.Allocate(1024, out var seg, out var actual);

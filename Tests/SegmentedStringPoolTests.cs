@@ -65,6 +65,22 @@ public sealed class SegmentedStringPoolTests : IDisposable
 		Assert.True(pool.SegmentCount >= 1);
 	}
 
+	[Fact]
+	public void Allocate_UnalignedOversizedArenaString_RoundTrips()
+	{
+		var opts = new SegmentedStringPoolOptions(
+			ArenaSegmentBytes: 18,
+			SmallStringThresholdChars: 0);
+		using var customPool = new SegmentedStringPool(opts);
+		var value = new string('u', 9);
+
+		var r = customPool.Allocate(value);
+
+		Assert.False(r.IsEmpty);
+		Assert.Equal(1, customPool.SegmentCount);
+		Assert.True(r.AsSpan().SequenceEqual(value));
+	}
+
 	[Theory]
 	[InlineData(128)]
 	[InlineData(129)]
