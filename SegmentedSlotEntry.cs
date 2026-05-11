@@ -24,6 +24,9 @@ internal struct SegmentedSlotEntry
 	// Zero for slab-tier slots (cell size is derived from the owning slab's size class).
 	public int AllocatedBytes;
 
+	// Permanently retired once the 31-bit reuse counter would overflow.
+	public bool Retired;
+
 	// Layout: [bit31=freeFlag | bits30..0=reuse counter]. Counter always increments on every state change,
 	// so a PooledStringRef's captured generation is invalidated immediately on free, even if the slot is reused.
 	public uint Generation;
@@ -37,9 +40,33 @@ internal struct SegmentedSlotEntry
 
 	// Counter bumps on free so a stale ref is rejected even before the slot is reused.
 	public static uint MarkFreeAndBumpGen(uint generation) =>
-		((GenerationValue(generation) + 1u) & SegmentedConstants.GenerationMask) | SegmentedConstants.HighBit;
+		TryMarkFreeAndBumpGen(generation, out var bumped) ? bumped : throw new OverflowException("Slot generation exhausted");
 
 	// Counter bumps on re-allocation so every live ref holds a distinct generation across its full lifetime.
 	public static uint ClearFreeAndBumpGen(uint generation) =>
-		(GenerationValue(generation) + 1u) & SegmentedConstants.GenerationMask;
+		TryClearFreeAndBumpGen(generation, out var bumped) ? bumped : throw new OverflowException("Slot generation exhausted");
+
+	public static bool TryMarkFreeAndBumpGen(uint generation, out uint bumpedGeneration)
+	{
+		var value = GenerationValue(generation);
+		if (value == SegmentedConstants.GenerationMask) {
+			bumpedGeneration = 0;
+			return false;
+		}
+
+		bumpedGeneration = ((value + 1u) & SegmentedConstants.GenerationMask) | SegmentedConstants.HighBit;
+		return true;
+	}
+
+	public static bool TryClearFreeAndBumpGen(uint generation, out uint bumpedGeneration)
+	{
+		var value = GenerationValue(generation);
+		if (value == SegmentedConstants.GenerationMask) {
+			bumpedGeneration = 0;
+			return false;
+		}
+
+		bumpedGeneration = (value + 1u) & SegmentedConstants.GenerationMask;
+		return true;
+	}
 }
