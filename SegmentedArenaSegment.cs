@@ -120,7 +120,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		}
 
 		// Bump fallback: carve from the never-yet-used tail of the buffer.
-		if (BumpOffset + size <= Capacity) {
+		if ((long)BumpOffset + size <= Capacity) {
 			ptr = new(Buffer.ToInt64() + BumpOffset);
 			BumpOffset += size;
 			actualBytes = size;
@@ -183,7 +183,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	internal static int NormalizeAllocationBytes(int byteCount)
 	{
 		ArgumentOutOfRangeException.ThrowIfNegative(byteCount);
-		const int alignment = SegmentedConstants.PtrAlignment;
+		const int alignment = SegmentedConstants.ArenaAllocationAlignment;
 		if (byteCount < SegmentedConstants.MinArenaBlockBytes) {
 			return SegmentedConstants.MinArenaBlockBytes;
 		}

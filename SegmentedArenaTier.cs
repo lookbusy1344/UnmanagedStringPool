@@ -111,13 +111,14 @@ internal sealed class SegmentedArenaTier : IDisposable
 	public void Reserve(int bytes)
 	{
 		ObjectDisposedException.ThrowIf(disposed, this);
-		var totalBytes = 0;
+		ArgumentOutOfRangeException.ThrowIfNegative(bytes);
+		long totalBytes = 0;
 		foreach (var s in segments) {
 			totalBytes += s.Capacity;
 		}
 
 		while (totalBytes < bytes) {
-			var next = Math.Max(defaultSegmentBytes, bytes - totalBytes);
+			var next = (int)Math.Max(defaultSegmentBytes, bytes - totalBytes);
 			segments.Add(new(next));
 			totalBytes += next;
 		}

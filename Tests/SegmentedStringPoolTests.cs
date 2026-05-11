@@ -81,6 +81,18 @@ public sealed class SegmentedStringPoolTests : IDisposable
 		Assert.True(r.AsSpan().SequenceEqual(value));
 	}
 
+	[Fact]
+	public void ReserveLarge_ByteCountOverflow_ThrowsArgumentOutOfRangeException()
+	{
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() => pool.ReserveLarge(int.MaxValue));
+	}
+
+	[Fact]
+	public void GetArenaByteCount_Overflow_ThrowsArgumentOutOfRangeException()
+	{
+		_ = Assert.Throws<ArgumentOutOfRangeException>(() => SegmentedStringPool.GetArenaByteCount(int.MaxValue));
+	}
+
 	[Theory]
 	[InlineData(128)]
 	[InlineData(129)]

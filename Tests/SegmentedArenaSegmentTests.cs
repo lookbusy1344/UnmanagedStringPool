@@ -38,6 +38,23 @@ public sealed class SegmentedArenaSegmentTests : IDisposable
 	}
 
 	[Fact]
+	public void TryAllocate_AlignmentOverflow_Throws()
+	{
+		_ = Assert.Throws<OverflowException>(() => segment.TryAllocate(int.MaxValue - 3, out _, out _));
+	}
+
+	[Fact]
+	public void TryAllocate_BumpOffsetOverflow_DoesNotAllocate()
+	{
+		var backingField = typeof(SegmentedArenaSegment).GetField("<BumpOffset>k__BackingField",
+			System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+		Assert.NotNull(backingField);
+		backingField!.SetValue(segment, int.MaxValue - 8);
+
+		Assert.False(segment.TryAllocate(16, out _, out _));
+	}
+
+	[Fact]
 	public void Free_AlignedSize_ReturnsBlockToBin()
 	{
 		_ = segment.TryAllocate(256, out var ptr, out _);

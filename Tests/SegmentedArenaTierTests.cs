@@ -1,6 +1,8 @@
 namespace LookBusy.Test;
 
 using System;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using LookBusy;
 using Xunit;
 
@@ -83,6 +85,27 @@ public sealed class SegmentedArenaTierTests : IDisposable
 		Assert.Same(s1, found);
 	}
 
+	[Fact]
+	public void Reserve_TotalBytesOverflow_UsesLongArithmetic()
+	{
+		var customTier = new SegmentedArenaTier(segmentBytes: 16);
+		try {
+			var segmentsField = typeof(SegmentedArenaTier).GetField("segments", BindingFlags.Instance | BindingFlags.NonPublic);
+			Assert.NotNull(segmentsField);
+			var segments = (System.Collections.Generic.List<SegmentedArenaSegment>)segmentsField!.GetValue(customTier)!;
+			segments.Clear();
+			segments.Add(CreateFakeSegment(int.MaxValue - 8));
+			segments.Add(CreateFakeSegment(16));
+
+			customTier.Reserve(1);
+
+			Assert.Equal(2, customTier.SegmentCount);
+		}
+		finally {
+			customTier.Dispose();
+		}
+	}
+
 	// P2-8: oversized segments are skipped for normal requests
 
 	[Fact]
@@ -122,5 +145,13 @@ public sealed class SegmentedArenaTierTests : IDisposable
 		Assert.False(oversized.Contains(normal));
 		_ = normal; // suppress unused warning
 		_ = oversizedPtr;
+	}
+
+	private static SegmentedArenaSegment CreateFakeSegment(int capacity)
+	{
+		var segment = (SegmentedArenaSegment)RuntimeHelpers.GetUninitializedObject(typeof(SegmentedArenaSegment));
+		typeof(SegmentedArenaSegment).GetField("Capacity", BindingFlags.Instance | BindingFlags.Public)!
+			.SetValue(segment, capacity);
+		return segment;
 	}
 }

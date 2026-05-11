@@ -9,6 +9,7 @@ internal static class SegmentedConstants
 	public const uint GenerationMask = 0x7FFFFFFFu; // lower 31 bits: monotonically-increasing reuse counter
 	public const uint NoFreeSlot = 0xFFFFFFFFu; // sentinel stored in freeHead when the slot free chain is empty
 	public const int PtrAlignment = 8; // Marshal.AllocHGlobal guarantees ≥8-byte alignment, so low 3 bits of every pointer are always zero
+	public const int ArenaAllocationAlignment = PtrAlignment; // arena blocks are normalized to the unmanaged pointer alignment
 	public const long TierTagMask = 1L; // bit 0 of a tagged pointer: 0=slab tier, 1=arena tier
 	public const long PtrMask = ~7L; // clears the 3 tag bits from a tagged pointer to recover the raw address
 	public const int TierSlab = 0; // bit 0 value: allocation lives in a slab cell
@@ -21,6 +22,7 @@ internal static class SegmentedConstants
 	public const int DefaultArenaSegmentBytes = 1 << 20; // 1 MB: amortises Marshal.AllocHGlobal overhead over many large strings
 	public const int DefaultSmallStringThresholdChars = 128; // strings ≤ threshold go to slab tier; above go to arena tier
 	public const int MaxSlabSizeClassChars = 128; // largest slab size class; threshold above this has no valid class
+	public const int MaxArenaAllocationChars = int.MaxValue / sizeof(char); // largest char count whose UTF-16 byte size fits in a signed int
 }
 
 internal static class IntPtrExtensions
@@ -100,9 +102,10 @@ public sealed class SegmentedStringPool : IDisposable
 
 		var length = value.Length;
 		var ptr = AllocateUnmanaged(length, out var tier, out var owner, out var allocatedBytes);
+		var byteCount = GetArenaByteCount(length);
 		unsafe {
 			fixed (char* src = value) {
-				Buffer.MemoryCopy(src, (void*)ptr, length * sizeof(char), length * sizeof(char));
+				Buffer.MemoryCopy(src, (void*)ptr, byteCount, byteCount);
 			}
 		}
 
@@ -187,7 +190,8 @@ public sealed class SegmentedStringPool : IDisposable
 	public void ReserveSmall(int chars)
 	{
 		ObjectDisposedException.ThrowIf(disposed, typeof(SegmentedStringPool));
-		if (chars <= 0) {
+		ArgumentOutOfRangeException.ThrowIfNegative(chars);
+		if (chars == 0) {
 			return;
 		}
 
@@ -200,11 +204,12 @@ public sealed class SegmentedStringPool : IDisposable
 	public void ReserveLarge(int chars)
 	{
 		ObjectDisposedException.ThrowIf(disposed, typeof(SegmentedStringPool));
-		if (chars <= 0) {
+		ArgumentOutOfRangeException.ThrowIfNegative(chars);
+		if (chars == 0) {
 			return;
 		}
 
-		arenaTier.Reserve(chars * sizeof(char));
+		arenaTier.Reserve(GetArenaByteCount(chars));
 	}
 
 	/// <summary>
@@ -214,7 +219,8 @@ public sealed class SegmentedStringPool : IDisposable
 	public void Reserve(int chars)
 	{
 		ObjectDisposedException.ThrowIf(disposed, typeof(SegmentedStringPool));
-		if (chars <= 0) {
+		ArgumentOutOfRangeException.ThrowIfNegative(chars);
+		if (chars == 0) {
 			return;
 		}
 
@@ -261,10 +267,17 @@ public sealed class SegmentedStringPool : IDisposable
 		}
 
 		tier = SegmentedConstants.TierArena;
-		var byteCount = charCount * sizeof(char);
+		var byteCount = GetArenaByteCount(charCount);
 		var arenaPtr = arenaTier.Allocate(byteCount, out var segment, out allocatedBytes);
 		owner = segment;
 		return arenaPtr;
+	}
+
+	internal static int GetArenaByteCount(int charCount)
+	{
+		ArgumentOutOfRangeException.ThrowIfNegative(charCount);
+		ArgumentOutOfRangeException.ThrowIfGreaterThan(charCount, SegmentedConstants.MaxArenaAllocationChars);
+		return checked(charCount * sizeof(char));
 	}
 
 	~SegmentedStringPool()
