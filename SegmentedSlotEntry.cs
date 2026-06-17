@@ -1,11 +1,9 @@
 namespace LookBusy;
 
-using System;
-
 /// <summary>
-/// Per-allocation slot metadata. 32 bytes aligned to 8. High bit of Generation marks slot as free;
-/// when free, Ptr stores the next-free-slot index cast to IntPtr, LengthChars and AllocatedBytes are
-/// zeroed, and Owner is nulled so the slab/segment is not kept alive by the slot table.
+///     Per-allocation slot metadata. 32 bytes aligned to 8. High bit of Generation marks slot as free;
+///     when free, Ptr stores the next-free-slot index cast to IntPtr, LengthChars and AllocatedBytes are
+///     zeroed, and Owner is nulled so the slab/segment is not kept alive by the slot table.
 /// </summary>
 internal struct SegmentedSlotEntry
 {

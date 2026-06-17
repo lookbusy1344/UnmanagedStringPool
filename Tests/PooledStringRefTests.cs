@@ -1,9 +1,6 @@
 namespace LookBusy.Test;
 
-using System;
-using System.Buffers;
 using System.Reflection;
-using LookBusy;
 using Xunit;
 
 public sealed class PooledStringRefTests
@@ -52,7 +49,7 @@ public sealed class PooledStringRefTests
 	[Fact]
 	public void StaleHandle_DoesNotBecomeValidAfterGenerationExhaustion()
 	{
-		using var pool = new SegmentedStringPool(new(InitialSlotCapacity: 1, SmallStringThresholdChars: 0));
+		using var pool = new SegmentedStringPool(new(1, SmallStringThresholdChars: 0));
 		var handle = pool.Allocate("hello");
 		var slotsField = typeof(SegmentedStringPool).GetField("slots", BindingFlags.Instance | BindingFlags.NonPublic);
 		Assert.NotNull(slotsField);
@@ -96,10 +93,7 @@ public sealed class PooledStringRefRoundtripTests : IDisposable
 	}
 
 	[Fact]
-	public void AsSpan_Empty_ReturnsEmpty()
-	{
-		Assert.True(PooledStringRef.Empty.AsSpan().IsEmpty);
-	}
+	public void AsSpan_Empty_ReturnsEmpty() => Assert.True(PooledStringRef.Empty.AsSpan().IsEmpty);
 
 	[Fact]
 	public void Length_ReturnsChars()
@@ -109,10 +103,7 @@ public sealed class PooledStringRefRoundtripTests : IDisposable
 	}
 
 	[Fact]
-	public void Length_EmptyRef_ReturnsZero()
-	{
-		Assert.Equal(0, PooledStringRef.Empty.Length);
-	}
+	public void Length_EmptyRef_ReturnsZero() => Assert.Equal(0, PooledStringRef.Empty.Length);
 
 	[Fact]
 	public void Dispose_FreesAllocation()
@@ -128,7 +119,11 @@ public sealed class PooledStringRefQueryTests : IDisposable
 {
 	private readonly SegmentedStringPool pool = new();
 
-	public void Dispose() { pool.Dispose(); GC.SuppressFinalize(this); }
+	public void Dispose()
+	{
+		pool.Dispose();
+		GC.SuppressFinalize(this);
+	}
 
 	[Fact]
 	public void IndexOf_Found_ReturnsOffset()
@@ -204,7 +199,11 @@ public sealed class PooledStringRefDuplicateTests : IDisposable
 {
 	private readonly SegmentedStringPool pool = new();
 
-	public void Dispose() { pool.Dispose(); GC.SuppressFinalize(this); }
+	public void Dispose()
+	{
+		pool.Dispose();
+		GC.SuppressFinalize(this);
+	}
 
 	[Fact]
 	public void Duplicate_ProducesEqualButDistinctHandle()
@@ -238,7 +237,11 @@ public sealed class PooledStringRefInsertTests : IDisposable
 {
 	private readonly SegmentedStringPool pool = new();
 
-	public void Dispose() { pool.Dispose(); GC.SuppressFinalize(this); }
+	public void Dispose()
+	{
+		pool.Dispose();
+		GC.SuppressFinalize(this);
+	}
 
 	[Fact]
 	public void Insert_AtBeginning_PrependsValue()
@@ -293,7 +296,11 @@ public sealed class PooledStringRefReplaceTests : IDisposable
 {
 	private readonly SegmentedStringPool pool = new();
 
-	public void Dispose() { pool.Dispose(); GC.SuppressFinalize(this); }
+	public void Dispose()
+	{
+		pool.Dispose();
+		GC.SuppressFinalize(this);
+	}
 
 	[Fact]
 	public void Replace_Single_ReplacesOnce()
@@ -373,7 +380,11 @@ public sealed class PooledStringRefEqualityTests : IDisposable
 {
 	private readonly SegmentedStringPool pool = new();
 
-	public void Dispose() { pool.Dispose(); GC.SuppressFinalize(this); }
+	public void Dispose()
+	{
+		pool.Dispose();
+		GC.SuppressFinalize(this);
+	}
 
 	[Fact]
 	public void Equals_SameContent_DifferentSlots_IsTrue()
@@ -393,10 +404,7 @@ public sealed class PooledStringRefEqualityTests : IDisposable
 	}
 
 	[Fact]
-	public void Equals_EmptyAndEmpty_IsTrue()
-	{
-		Assert.True(PooledStringRef.Empty.Equals(PooledStringRef.Empty));
-	}
+	public void Equals_EmptyAndEmpty_IsTrue() => Assert.True(PooledStringRef.Empty.Equals(PooledStringRef.Empty));
 
 	[Fact]
 	public void Equals_Object_String_ReturnsFalse()
@@ -404,8 +412,8 @@ public sealed class PooledStringRefEqualityTests : IDisposable
 		// Cross-type equality with string violates GetHashCode contract (their hashes diverge),
 		// so Equals(object string) must return false. Use AsSpan().SequenceEqual(s) for content comparison.
 		var a = pool.Allocate("hello");
-		Assert.False(a.Equals((object)"hello"));
-		Assert.False(a.Equals((object)"HELLO"));
+		Assert.False(a.Equals("hello"));
+		Assert.False(a.Equals("HELLO"));
 	}
 
 	[Fact]

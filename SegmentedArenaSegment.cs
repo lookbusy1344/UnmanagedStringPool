@@ -1,13 +1,12 @@
 namespace LookBusy;
 
-using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 /// <summary>
-/// Free-block header stored inline in the first 16 bytes of any freed arena block. Read/written
-/// directly to unmanaged memory — never instantiated on the managed heap.
+///     Free-block header stored inline in the first 16 bytes of any freed arena block. Read/written
+///     directly to unmanaged memory — never instantiated on the managed heap.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Size = 16)]
 internal struct SegmentedFreeBlockHeader
@@ -19,41 +18,34 @@ internal struct SegmentedFreeBlockHeader
 }
 
 /// <summary>
-/// Boundary-tag footer written at the last 8 bytes of every free block.
-/// Enables O(1) backward coalescing: when freeing a block at offset N, read the
-/// footer at N−8 to check if the preceding block is free and get its size.
-/// In-use blocks do not carry a footer — the IsFree flag distinguishes stale data.
+///     Boundary-tag footer written at the last 8 bytes of every free block.
+///     Enables O(1) backward coalescing: when freeing a block at offset N, read the
+///     footer at N−8 to check if the preceding block is free and get its size.
+///     In-use blocks do not carry a footer — the IsFree flag distinguishes stale data.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Size = 8)]
 internal struct SegmentedFreeBlockFooter
 {
 	public int SizeBytes; // mirrors header SizeBytes so we can locate the header
-	public int IsFree;    // non-zero when the block is on the free list
+	public int IsFree; // non-zero when the block is on the free list
 }
 
 /// <summary>
-/// A single arena segment. Bump allocator from the tail + free list from the head, via segregated
-/// bins keyed by Log2(blockSize). Free blocks embed their own link headers.
+///     A single arena segment. Bump allocator from the tail + free list from the head, via segregated
+///     bins keyed by Log2(blockSize). Free blocks embed their own link headers.
 /// </summary>
 internal sealed class SegmentedArenaSegment : IDisposable
 {
-	[InlineArray(SegmentedConstants.ArenaBinCount)]
-	private struct BinHeadArray
-	{
-		private int _e;
-	}
-
 	public readonly IntPtr Buffer;
 	public readonly int Capacity;
-	public int BumpOffset { get; private set; }
+
+	private BinHeadArray binHeads;
+	private bool disposed;
 
 	// Set by SegmentedArenaTier when this segment was created to satisfy a single request
 	// larger than the default segment size. The normal allocation loop skips oversized segments
 	// so that small subsequent allocations don't mix into a dedicated large-string segment.
 	public bool IsOversized;
-
-	private BinHeadArray binHeads;
-	private bool disposed;
 
 	public SegmentedArenaSegment(int capacity)
 	{
@@ -65,7 +57,15 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		}
 	}
 
+	public int BumpOffset { get; private set; }
+
 	public long UnmanagedBytes => Capacity;
+
+	public void Dispose()
+	{
+		Dispose(true);
+		GC.SuppressFinalize(this);
+	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public bool Contains(IntPtr ptr)
@@ -75,15 +75,15 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	}
 
 	/// <summary>
-	/// Attempts to allocate <paramref name="byteCount"/> bytes from this segment. Searches free-list bins from the
-	/// smallest sufficient bin upward, splitting any oversized block. Falls back to bump allocation if no free block fits.
-	/// Returns false if neither strategy can satisfy the request.
-	/// <para>
-	/// <paramref name="actualBytes"/> receives the true number of bytes handed out. This equals the aligned
-	/// request size in the split and bump cases, but equals the full free-block size when the remainder after
-	/// a split would be smaller than <see cref="SegmentedConstants.MinArenaBlockBytes"/> (no-split path).
-	/// The caller must store this value and pass it back to <see cref="Free"/> to avoid orphaning the slack.
-	/// </para>
+	///     Attempts to allocate <paramref name="byteCount" /> bytes from this segment. Searches free-list bins from the
+	///     smallest sufficient bin upward, splitting any oversized block. Falls back to bump allocation if no free block fits.
+	///     Returns false if neither strategy can satisfy the request.
+	///     <para>
+	///         <paramref name="actualBytes" /> receives the true number of bytes handed out. This equals the aligned
+	///         request size in the split and bump cases, but equals the full free-block size when the remainder after
+	///         a split would be smaller than <see cref="SegmentedConstants.MinArenaBlockBytes" /> (no-split path).
+	///         The caller must store this value and pass it back to <see cref="Free" /> to avoid orphaning the slack.
+	///     </para>
 	/// </summary>
 	public bool TryAllocate(int byteCount, out IntPtr ptr, out int actualBytes)
 	{
@@ -133,8 +133,8 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	}
 
 	/// <summary>
-	/// Returns a block to the free list, writing a <see cref="SegmentedFreeBlockHeader"/> into the freed memory itself.
-	/// Coalesces with adjacent free blocks before linking into a bin to reduce fragmentation.
+	///     Returns a block to the free list, writing a <see cref="SegmentedFreeBlockHeader" /> into the freed memory itself.
+	///     Coalesces with adjacent free blocks before linking into a bin to reduce fragmentation.
 	/// </summary>
 	public void Free(IntPtr ptr, int byteCount)
 	{
@@ -148,8 +148,8 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	}
 
 	/// <summary>
-	/// Resets the segment to its pristine state without freeing unmanaged memory. Used by <c>pool.Clear()</c>;
-	/// setting <see cref="BumpOffset"/> to zero makes the entire buffer available to the bump allocator again.
+	///     Resets the segment to its pristine state without freeing unmanaged memory. Used by <c>pool.Clear()</c>;
+	///     setting <see cref="BumpOffset" /> to zero makes the entire buffer available to the bump allocator again.
 	/// </summary>
 	public void Reset()
 	{
@@ -159,16 +159,10 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		}
 	}
 
-	public void Dispose()
-	{
-		Dispose(true);
-		GC.SuppressFinalize(this);
-	}
-
 	/// <summary>
-	/// Dispose pattern: disposing=true means Dispose() was called explicitly; disposing=false means finalizer is running.
-	/// Currently only unmanaged resources (Buffer) need cleanup, so the parameter is unused. If managed resources
-	/// (e.g., IDisposable fields) are added later, they should only be disposed when disposing=true.
+	///     Dispose pattern: disposing=true means Dispose() was called explicitly; disposing=false means finalizer is running.
+	///     Currently only unmanaged resources (Buffer) need cleanup, so the parameter is unused. If managed resources
+	///     (e.g., IDisposable fields) are added later, they should only be disposed when disposing=true.
 	/// </summary>
 	// ReSharper disable once UnusedParameter.Local
 	private void Dispose(bool disposing)
@@ -338,4 +332,10 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	}
 
 	~SegmentedArenaSegment() => Dispose(false);
+
+	[InlineArray(SegmentedConstants.ArenaBinCount)]
+	private struct BinHeadArray
+	{
+		private int _e;
+	}
 }

@@ -1,9 +1,6 @@
-using System;
-using System.Collections.Generic;
-using LookBusy;
-using Xunit;
-
 namespace LookBusy.Test;
+
+using Xunit;
 
 public class FragmentationCalculationTest
 {

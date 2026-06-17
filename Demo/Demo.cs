@@ -1,8 +1,5 @@
 namespace LookBusy.Demo;
 
-using System;
-using LookBusy;
-
 public static class StringDemo
 {
 	public static void Main()
@@ -118,8 +115,8 @@ public static class StringDemo
 		str3.Free();
 		str2.Free();
 
-		using var str4 = pool.Allocate("New");     // reuses a slab cell
-		var str5 = str1.Insert(5, " Beautiful");   // allocates a new entry
+		using var str4 = pool.Allocate("New"); // reuses a slab cell
+		var str5 = str1.Insert(5, " Beautiful"); // allocates a new entry
 
 		WriteLineRef(str4); // New
 		WriteLineRef(str5); // Hello Beautiful

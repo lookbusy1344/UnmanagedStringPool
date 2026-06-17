@@ -1,32 +1,27 @@
 // ReSharper disable ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
+
 namespace LookBusy;
 
-using System;
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
 /// <summary>
-/// Manages slab chains per size class (8, 16, 32, 64, 128 chars). Each class has an intrusive
-/// singly-linked chain of non-full slabs threaded through <see cref="SegmentedSlab.NextInClass"/>;
-/// <see cref="activeSlabs"/> holds the chain head per class. Full slabs are unlinked; freeing a cell
-/// in a full slab re-links it to the chain head. <see cref="allSlabs"/> tracks every slab (full or
-/// not) for address-based pointer lookup.
+///     Manages slab chains per size class (8, 16, 32, 64, 128 chars). Each class has an intrusive
+///     singly-linked chain of non-full slabs threaded through <see cref="SegmentedSlab.NextInClass" />;
+///     <see cref="activeSlabs" /> holds the chain head per class. Full slabs are unlinked; freeing a cell
+///     in a full slab re-links it to the chain head. <see cref="allSlabs" /> tracks every slab (full or
+///     not) for address-based pointer lookup.
 /// </summary>
 internal sealed class SegmentedSlabTier : IDisposable
 {
-	[InlineArray(SegmentedConstants.SlabSizeClassCount)]
-	private struct ActiveSlabArray
-	{
-		private SegmentedSlab? _e;
-	}
-
-	// Chain invariant: every slab in activeSlabs[] has at least one free cell.
-	// Full slabs are detached from their chain on the cycle they fill; freeing a cell in a full slab re-links it.
-	private ActiveSlabArray activeSlabs;
+	public const int SizeClassCount = SegmentedConstants.SlabSizeClassCount;
 
 	// Tracks every slab regardless of chain state so LocateSlabByPointer can find full (off-chain) slabs during Free.
 	private readonly List<SegmentedSlab> allSlabs = [];
 	private readonly int cellsPerSlab;
+
+	// Chain invariant: every slab in activeSlabs[] has at least one free cell.
+	// Full slabs are detached from their chain on the cycle they fill; freeing a cell in a full slab re-links it.
+	private ActiveSlabArray activeSlabs;
 	private bool disposed;
 
 	public SegmentedSlabTier(int cellsPerSlab)
@@ -35,9 +30,22 @@ internal sealed class SegmentedSlabTier : IDisposable
 		this.cellsPerSlab = cellsPerSlab;
 	}
 
-	public const int SizeClassCount = SegmentedConstants.SlabSizeClassCount;
-
 	public int SlabCount => allSlabs.Count;
+
+	public void Dispose()
+	{
+		if (disposed) { return; }
+
+		disposed = true;
+		foreach (var s in allSlabs) {
+			s.Dispose();
+		}
+
+		allSlabs.Clear();
+		for (var i = 0; i < SegmentedConstants.SlabSizeClassCount; ++i) {
+			activeSlabs[i] = null;
+		}
+	}
 
 	internal long GetManagedBitmapBytes()
 	{
@@ -60,8 +68,8 @@ internal sealed class SegmentedSlabTier : IDisposable
 	}
 
 	/// <summary>
-	/// Returns the index of the smallest size class that fits <paramref name="charCount"/> chars,
-	/// or -1 if the count exceeds the slab tier threshold (caller must route to the arena tier).
+	///     Returns the index of the smallest size class that fits <paramref name="charCount" /> chars,
+	///     or -1 if the count exceeds the slab tier threshold (caller must route to the arena tier).
 	/// </summary>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static int ChooseSizeClass(int charCount) =>
@@ -71,7 +79,7 @@ internal sealed class SegmentedSlabTier : IDisposable
 			<= 32 => 2,
 			<= 64 => 3,
 			<= 128 => 4,
-			_ => -1
+			_ => -1,
 		};
 
 	// Size classes are a doubling sequence starting at 8 chars: 8<<0=8, 8<<1=16, ..., 8<<4=128.
@@ -79,8 +87,8 @@ internal sealed class SegmentedSlabTier : IDisposable
 	public static int CellBytesForSizeClass(int sizeClass) => (8 << sizeClass) * sizeof(char);
 
 	/// <summary>
-	/// Allocates one cell from the appropriate size-class chain. If the chain head fills after allocation
-	/// it is detached so the chain invariant (every slab has ≥1 free cell) is maintained.
+	///     Allocates one cell from the appropriate size-class chain. If the chain head fills after allocation
+	///     it is detached so the chain invariant (every slab has ≥1 free cell) is maintained.
 	/// </summary>
 	public IntPtr Allocate(int charCount, out SegmentedSlab owningSlab)
 	{
@@ -108,8 +116,8 @@ internal sealed class SegmentedSlabTier : IDisposable
 	}
 
 	/// <summary>
-	/// Returns one cell to its slab. If the slab was full (and therefore off its chain),
-	/// re-links it at the chain head so it becomes available for future allocations again.
+	///     Returns one cell to its slab. If the slab was full (and therefore off its chain),
+	///     re-links it at the chain head so it becomes available for future allocations again.
 	/// </summary>
 	public void Free(IntPtr ptr, SegmentedSlab slab)
 	{
@@ -133,9 +141,9 @@ internal sealed class SegmentedSlabTier : IDisposable
 	}
 
 	/// <summary>
-	/// Resets all slabs to fully-free and re-threads them into their size-class chains without freeing unmanaged memory.
-	/// Used by <c>pool.Clear()</c>. The two-pass approach (disconnect all, then re-link all) avoids stale NextInClass
-	/// pointers left over from previous chain state.
+	///     Resets all slabs to fully-free and re-threads them into their size-class chains without freeing unmanaged memory.
+	///     Used by <c>pool.Clear()</c>. The two-pass approach (disconnect all, then re-link all) avoids stale NextInClass
+	///     pointers left over from previous chain state.
 	/// </summary>
 	public void ResetAll()
 	{
@@ -156,9 +164,9 @@ internal sealed class SegmentedSlabTier : IDisposable
 	}
 
 	/// <summary>
-	/// Pre-allocates slab capacity for at least <paramref name="smallChars"/> chars of small-string storage,
-	/// distributing the budget evenly across all five size classes. Previously this always used the largest
-	/// class (128-char cells), which wasted capacity when workloads were dominated by smaller strings.
+	///     Pre-allocates slab capacity for at least <paramref name="smallChars" /> chars of small-string storage,
+	///     distributing the budget evenly across all five size classes. Previously this always used the largest
+	///     class (128-char cells), which wasted capacity when workloads were dominated by smaller strings.
 	/// </summary>
 	public void Reserve(int smallChars)
 	{
@@ -182,21 +190,6 @@ internal sealed class SegmentedSlabTier : IDisposable
 		}
 
 		return count;
-	}
-
-	public void Dispose()
-	{
-		if (disposed) { return; }
-
-		disposed = true;
-		foreach (var s in allSlabs) {
-			s.Dispose();
-		}
-
-		allSlabs.Clear();
-		for (var i = 0; i < SegmentedConstants.SlabSizeClassCount; ++i) {
-			activeSlabs[i] = null;
-		}
 	}
 
 	// Injects a slab (which may be full) at the head of the active chain for a given size class.
@@ -230,5 +223,11 @@ internal sealed class SegmentedSlabTier : IDisposable
 
 		activeSlabs[sizeClass] = head.NextInClass;
 		head.NextInClass = null;
+	}
+
+	[InlineArray(SegmentedConstants.SlabSizeClassCount)]
+	private struct ActiveSlabArray
+	{
+		private SegmentedSlab? _e;
 	}
 }

@@ -1,9 +1,5 @@
 namespace LookBusy.Test;
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using LookBusy;
 using Xunit;
 
 public sealed class FragmentationAndMemoryTests : IDisposable
@@ -17,6 +13,23 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 		pool?.Dispose();
 		GC.SuppressFinalize(this);
 	}
+
+	#region Helper Methods
+
+	private int GetApproximateFreeBlockCount()
+	{
+		// This is an approximation since we can't directly access free block count
+		// We estimate based on fragmentation and free space
+		var fragmentation = pool.FragmentationPercentage;
+		if (fragmentation < 1.0) {
+			return 0; // No significant fragmentation
+		}
+
+		// Rough estimate: higher fragmentation suggests more blocks
+		return (int)(fragmentation / 10); // Very rough approximation
+	}
+
+	#endregion
 
 	#region Fragmentation Creation and Detection
 
@@ -150,7 +163,7 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 			pool.Allocate("Short"), // 5 chars
 			pool.Allocate("MediumLength"), // 12 chars
 			pool.Allocate("VeryLongString"), // 14 chars
-			pool.Allocate("X") // 1 char
+			pool.Allocate("X"), // 1 char
 		};
 
 		// Free all to create different sized blocks
@@ -413,23 +426,6 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 				Assert.Equal(0.0, pool.FragmentationPercentage, 1);
 			}
 		}
-	}
-
-	#endregion
-
-	#region Helper Methods
-
-	private int GetApproximateFreeBlockCount()
-	{
-		// This is an approximation since we can't directly access free block count
-		// We estimate based on fragmentation and free space
-		var fragmentation = pool.FragmentationPercentage;
-		if (fragmentation < 1.0) {
-			return 0; // No significant fragmentation
-		}
-
-		// Rough estimate: higher fragmentation suggests more blocks
-		return (int)(fragmentation / 10); // Very rough approximation
 	}
 
 	#endregion

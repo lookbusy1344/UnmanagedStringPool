@@ -1,7 +1,5 @@
 namespace LookBusy.Test;
 
-using System;
-using LookBusy;
 using Xunit;
 
 public sealed class GcPressureTests
@@ -18,8 +16,9 @@ public sealed class GcPressureTests
 		var managedBytes = MeasureAllocated(() => {
 			var arr = new string[N];
 			for (var i = 0; i < N; ++i) {
-				arr[i] = new string('x', LargeStringLength);
+				arr[i] = new('x', LargeStringLength);
 			}
+
 			GC.KeepAlive(arr);
 		});
 
@@ -29,9 +28,11 @@ public sealed class GcPressureTests
 			for (var i = 0; i < N; ++i) {
 				arr[i] = pool.Allocate(source);
 			}
+
 			for (var i = 0; i < N; ++i) {
 				arr[i].Free();
 			}
+
 			GC.KeepAlive(arr);
 		});
 
@@ -49,8 +50,9 @@ public sealed class GcPressureTests
 		var managedBytes = MeasureAllocated(() => {
 			var window = new string[WindowSize];
 			for (var i = 0; i < N; ++i) {
-				window[i % WindowSize] = new string('x', LargeStringLength);
+				window[i % WindowSize] = new('x', LargeStringLength);
 			}
+
 			GC.KeepAlive(window);
 		});
 
@@ -62,12 +64,15 @@ public sealed class GcPressureTests
 				if (i >= WindowSize) {
 					window[slot].Free();
 				}
+
 				window[slot] = pool.Allocate(source);
 			}
+
 			var limit = Math.Min(N, WindowSize);
 			for (var i = 0; i < limit; ++i) {
 				window[i].Free();
 			}
+
 			GC.KeepAlive(window);
 		});
 
@@ -85,7 +90,9 @@ public sealed class GcPressureTests
 		var legacyBytes = MeasureAllocated(() => {
 			var arr = new PooledString[N];
 			for (var i = 0; i < N; ++i) { arr[i] = legacy.Allocate(source); }
+
 			for (var i = 0; i < N; ++i) { arr[i].Free(); }
+
 			GC.KeepAlive(arr);
 		});
 
@@ -94,7 +101,9 @@ public sealed class GcPressureTests
 		var segBytes = MeasureAllocated(() => {
 			var arr = new PooledStringRef[N];
 			for (var i = 0; i < N; ++i) { arr[i] = seg.Allocate(source); }
+
 			for (var i = 0; i < N; ++i) { arr[i].Free(); }
+
 			GC.KeepAlive(arr);
 		});
 
@@ -113,10 +122,13 @@ public sealed class GcPressureTests
 			for (var i = 0; i < N; ++i) {
 				var slot = i % WindowSize;
 				if (i >= WindowSize) { window[slot].Free(); }
+
 				window[slot] = legacy.Allocate(source);
 			}
+
 			var limit = Math.Min(N, WindowSize);
 			for (var i = 0; i < limit; ++i) { window[i].Free(); }
+
 			GC.KeepAlive(window);
 		});
 
@@ -127,10 +139,13 @@ public sealed class GcPressureTests
 			for (var i = 0; i < N; ++i) {
 				var slot = i % WindowSize;
 				if (i >= WindowSize) { window[slot].Free(); }
+
 				window[slot] = seg.Allocate(source);
 			}
+
 			var limit = Math.Min(N, WindowSize);
 			for (var i = 0; i < limit; ++i) { window[i].Free(); }
+
 			GC.KeepAlive(window);
 		});
 
@@ -145,7 +160,8 @@ public sealed class GcPressureTests
 
 		var managedBytes = MeasureAllocated(() => {
 			var arr = new string[N];
-			for (var i = 0; i < N; ++i) { arr[i] = new string('x', LargeStringLength); }
+			for (var i = 0; i < N; ++i) { arr[i] = new('x', LargeStringLength); }
+
 			GC.KeepAlive(arr);
 		});
 
@@ -154,12 +170,15 @@ public sealed class GcPressureTests
 		// Warm-up: grow slot table to steady state
 		var warm = new PooledStringRef[N];
 		for (var i = 0; i < N; ++i) { warm[i] = seg.Allocate(source); }
+
 		for (var i = 0; i < N; ++i) { warm[i].Free(); }
 
 		var segBytes = MeasureAllocated(() => {
 			var arr = new PooledStringRef[N];
 			for (var i = 0; i < N; ++i) { arr[i] = seg.Allocate(source); }
+
 			for (var i = 0; i < N; ++i) { arr[i].Free(); }
+
 			GC.KeepAlive(arr);
 		});
 

@@ -1,6 +1,6 @@
 namespace LookBusy;
 
-using System;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 internal static class SegmentedConstants
@@ -44,21 +44,23 @@ public sealed record SegmentedStringPoolOptions(
 );
 
 /// <summary>
-/// A GC-pressure-free string pool backed by unmanaged memory. Strings shorter than
-/// <see cref="SegmentedStringPoolOptions.SmallStringThresholdChars"/> are stored in the slab tier
-/// (fixed-size cells, bitmap-tracked, O(1) alloc/free); longer strings go to the arena tier
-/// (bump + segregated free lists). Callers hold <see cref="PooledStringRef"/> handles — 16-byte
-/// value types that never pin or move any managed object.
+///     A GC-pressure-free string pool backed by unmanaged memory. Strings shorter than
+///     <see cref="SegmentedStringPoolOptions.SmallStringThresholdChars" /> are stored in the slab tier
+///     (fixed-size cells, bitmap-tracked, O(1) alloc/free); longer strings go to the arena tier
+///     (bump + segregated free lists). Callers hold <see cref="PooledStringRef" /> handles — 16-byte
+///     value types that never pin or move any managed object.
 /// </summary>
 /// <remarks>
-/// Not thread-safe. All callers sharing a pool instance must provide external synchronisation.
+///     Not thread-safe. All callers sharing a pool instance must provide external synchronisation.
 /// </remarks>
 public sealed class SegmentedStringPool : IDisposable
 {
-	private readonly SegmentedSlotTable slots;
-	private readonly SegmentedSlabTier slabTier;
 	private readonly SegmentedArenaTier arenaTier;
+	private readonly SegmentedSlabTier slabTier;
+	private readonly SegmentedSlotTable slots;
+
 	private readonly int smallThreshold;
+
 	// volatile: FreeSlot reads this on the user thread while the GC finalizer thread may call ~SegmentedStringPool.
 	private volatile bool disposed;
 
@@ -78,20 +80,28 @@ public sealed class SegmentedStringPool : IDisposable
 	}
 
 	public int ActiveAllocations => slots.ActiveCount;
-	public long GetTotalBytesUnmanaged() => slabTier.GetUnmanagedBytes() + arenaTier.GetUnmanagedBytes();
-	/// <summary>
-	/// Lower-bound estimate of managed heap bytes owned by this pool. Includes the slot-entry array
-	/// and slab bitmap arrays; excludes GC object headers and framework list overhead.
-	/// </summary>
-	public long GetTotalBytesManaged() =>
-		slots.Capacity * (long)Unsafe.SizeOf<SegmentedSlotEntry>() + slabTier.GetManagedBitmapBytes();
 	public int SlabCount => slabTier.SlabCount;
 	public int SegmentCount => arenaTier.SegmentCount;
 	internal bool IsDisposed => disposed;
 
+	public void Dispose()
+	{
+		Dispose(true);
+		GC.SuppressFinalize(this);
+	}
+
+	public long GetTotalBytesUnmanaged() => slabTier.GetUnmanagedBytes() + arenaTier.GetUnmanagedBytes();
+
 	/// <summary>
-	/// Copies <paramref name="value"/> into unmanaged memory and returns a <see cref="PooledStringRef"/> handle.
-	/// Empty spans return <see cref="PooledStringRef.Empty"/> without touching either tier.
+	///     Lower-bound estimate of managed heap bytes owned by this pool. Includes the slot-entry array
+	///     and slab bitmap arrays; excludes GC object headers and framework list overhead.
+	/// </summary>
+	public long GetTotalBytesManaged() =>
+		(slots.Capacity * (long)Unsafe.SizeOf<SegmentedSlotEntry>()) + slabTier.GetManagedBitmapBytes();
+
+	/// <summary>
+	///     Copies <paramref name="value" /> into unmanaged memory and returns a <see cref="PooledStringRef" /> handle.
+	///     Empty spans return <see cref="PooledStringRef.Empty" /> without touching either tier.
 	/// </summary>
 	public PooledStringRef Allocate(ReadOnlySpan<char> value)
 	{
@@ -116,8 +126,8 @@ public sealed class SegmentedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Resolves a handle to the raw character span in unmanaged memory. The tier tag stored in bit 0 of the
-	/// slot's pointer is masked off before building the span — reading never needs to know which tier owns the data.
+	///     Resolves a handle to the raw character span in unmanaged memory. The tier tag stored in bit 0 of the
+	///     slot's pointer is masked off before building the span — reading never needs to know which tier owns the data.
 	/// </summary>
 	internal ReadOnlySpan<char> ReadSlot(uint slotIndex, uint generation)
 	{
@@ -142,8 +152,8 @@ public sealed class SegmentedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Decodes the tier tag from the slot's pointer and routes the deallocation to the correct tier,
-	/// then frees the slot entry. Silently no-ops if the pool is already disposed or the handle is stale.
+	///     Decodes the tier tag from the slot's pointer and routes the deallocation to the correct tier,
+	///     then frees the slot entry. Silently no-ops if the pool is already disposed or the handle is stale.
 	/// </summary>
 	internal void FreeSlot(uint slotIndex, uint generation)
 	{
@@ -171,9 +181,9 @@ public sealed class SegmentedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Invalidates all live handles and reclaims all string storage without freeing any unmanaged memory.
-	/// Slabs and segments are reset and reused for subsequent allocations — use this to efficiently
-	/// process a new batch of strings without the cost of re-allocating buffers from the OS.
+	///     Invalidates all live handles and reclaims all string storage without freeing any unmanaged memory.
+	///     Slabs and segments are reset and reused for subsequent allocations — use this to efficiently
+	///     process a new batch of strings without the cost of re-allocating buffers from the OS.
 	/// </summary>
 	public void Clear()
 	{
@@ -184,8 +194,8 @@ public sealed class SegmentedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Pre-allocates unmanaged slab capacity for at least <paramref name="chars"/> small-string characters,
-	/// distributing slabs proportionally across all size classes.
+	///     Pre-allocates unmanaged slab capacity for at least <paramref name="chars" /> small-string characters,
+	///     distributing slabs proportionally across all size classes.
 	/// </summary>
 	public void ReserveSmall(int chars)
 	{
@@ -199,7 +209,7 @@ public sealed class SegmentedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Pre-allocates unmanaged arena capacity for at least <paramref name="chars"/> large-string characters.
+	///     Pre-allocates unmanaged arena capacity for at least <paramref name="chars" /> large-string characters.
 	/// </summary>
 	public void ReserveLarge(int chars)
 	{
@@ -213,8 +223,8 @@ public sealed class SegmentedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Pre-allocates unmanaged capacity for at least <paramref name="chars"/> characters, split evenly between tiers.
-	/// For workload-aware pre-warming prefer <see cref="ReserveSmall"/> and <see cref="ReserveLarge"/> directly.
+	///     Pre-allocates unmanaged capacity for at least <paramref name="chars" /> characters, split evenly between tiers.
+	///     For workload-aware pre-warming prefer <see cref="ReserveSmall" /> and <see cref="ReserveLarge" /> directly.
 	/// </summary>
 	public void Reserve(int chars)
 	{
@@ -225,13 +235,7 @@ public sealed class SegmentedStringPool : IDisposable
 		}
 
 		ReserveSmall(chars / 2);
-		ReserveLarge(chars - chars / 2);
-	}
-
-	public void Dispose()
-	{
-		Dispose(true);
-		GC.SuppressFinalize(this);
+		ReserveLarge(chars - (chars / 2));
 	}
 
 	private void Dispose(bool disposing)
@@ -252,8 +256,8 @@ public sealed class SegmentedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Routes an allocation to the slab tier (≤ threshold) or arena tier (> threshold)
-	/// and returns the raw unmanaged pointer together with the tier tag to be embedded in the slot.
+	///     Routes an allocation to the slab tier (≤ threshold) or arena tier (> threshold)
+	///     and returns the raw unmanaged pointer together with the tier tag to be embedded in the slot.
 	/// </summary>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	private IntPtr AllocateUnmanaged(int charCount, out int tier, out object owner, out int allocatedBytes)
@@ -285,7 +289,8 @@ public sealed class SegmentedStringPool : IDisposable
 		// D-4: surface disposal leaks in debug builds. Debug.WriteLine is safe from a finalizer;
 		// Debug.Assert/Fail would abort the process in non-interactive environments.
 		if (!disposed) {
-			System.Diagnostics.Debug.WriteLine("SegmentedStringPool was not disposed before finalization — unmanaged memory will be reclaimed by GC but later than necessary.");
+			Debug.WriteLine(
+				"SegmentedStringPool was not disposed before finalization — unmanaged memory will be reclaimed by GC but later than necessary.");
 		}
 
 		Dispose(false);

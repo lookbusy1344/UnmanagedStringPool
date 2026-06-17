@@ -5,6 +5,7 @@ This directory contains a demonstration application showing practical usage of t
 ## Overview
 
 The demo application (`Demo.cs`) provides a hands-on example of:
+
 - Creating and managing a string pool
 - Allocating and freeing strings
 - String manipulation operations
@@ -24,24 +25,28 @@ dotnet run --project Demo/StringPoolDemo.csproj
 ## Demo Features
 
 ### Basic Operations
+
 - String allocation from the pool
 - Value semantics demonstration (struct equality)
 - String freeing and memory reuse
 - Using statement integration with disposable strings
 
 ### String Manipulation
+
 - String insertion operations
 - Replacement and trimming
 - Substring extraction
 - Case conversion
 
 ### Memory Management
+
 - Real-time fragmentation monitoring
 - Free space tracking
 - Active allocation counting
 - Forced defragmentation and pool growth
 
 ### Performance Comparison
+
 - Timing comparisons between pooled and regular strings
 - Memory allocation stress testing
 - GC pressure demonstration
@@ -76,6 +81,7 @@ Fragmentation: 0.00%
 ## Customization
 
 Modify the demo to experiment with:
+
 - Different initial pool sizes
 - Various string allocation patterns
 - Concurrent access scenarios (with proper synchronization)

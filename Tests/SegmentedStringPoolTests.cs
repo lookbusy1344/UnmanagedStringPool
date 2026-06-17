@@ -1,7 +1,5 @@
 namespace LookBusy.Test;
 
-using System;
-using LookBusy;
 using Xunit;
 
 public sealed class SegmentedStringPoolTests : IDisposable
@@ -15,10 +13,7 @@ public sealed class SegmentedStringPoolTests : IDisposable
 	}
 
 	[Fact]
-	public void Constructor_Default_ZeroActive()
-	{
-		Assert.Equal(0, pool.ActiveAllocations);
-	}
+	public void Constructor_Default_ZeroActive() => Assert.Equal(0, pool.ActiveAllocations);
 
 	[Fact]
 	public void Allocate_EmptySpan_ReturnsEmptyRef()
@@ -82,16 +77,12 @@ public sealed class SegmentedStringPoolTests : IDisposable
 	}
 
 	[Fact]
-	public void ReserveLarge_ByteCountOverflow_ThrowsArgumentOutOfRangeException()
-	{
+	public void ReserveLarge_ByteCountOverflow_ThrowsArgumentOutOfRangeException() =>
 		_ = Assert.Throws<ArgumentOutOfRangeException>(() => pool.ReserveLarge(int.MaxValue));
-	}
 
 	[Fact]
-	public void GetArenaByteCount_Overflow_ThrowsArgumentOutOfRangeException()
-	{
+	public void GetArenaByteCount_Overflow_ThrowsArgumentOutOfRangeException() =>
 		_ = Assert.Throws<ArgumentOutOfRangeException>(() => SegmentedStringPool.GetArenaByteCount(int.MaxValue));
-	}
 
 	[Theory]
 	[InlineData(128)]
@@ -221,15 +212,15 @@ public sealed class SegmentedStringPoolTests : IDisposable
 		using var pool = new SegmentedStringPool(opts);
 
 		var r1 = pool.Allocate(new string('a', 12)); // 24 B from bump
-		var r2 = pool.Allocate(new string('b', 8));  // 16 B from bump; bump now at 40
-		r1.Free();                                    // 24-B free block at offset 0
+		var r2 = pool.Allocate(new string('b', 8)); // 16 B from bump; bump now at 40
+		r1.Free(); // 24-B free block at offset 0
 
-		var r3 = pool.Allocate(new string('c', 8));  // 16 B from free list — no-split, gets 24 B
-		r3.Free();                                    // must return the full 24 B back
+		var r3 = pool.Allocate(new string('c', 8)); // 16 B from free list — no-split, gets 24 B
+		r3.Free(); // must return the full 24 B back
 
 		var r4 = pool.Allocate(new string('d', 12)); // 24 B — must come from the recovered free block
 		Assert.False(r4.IsEmpty);
-		Assert.Equal(1, pool.SegmentCount);           // no new segment should have been created
+		Assert.Equal(1, pool.SegmentCount); // no new segment should have been created
 
 		r2.Free();
 		r4.Free();

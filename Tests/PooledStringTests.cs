@@ -1,8 +1,5 @@
 namespace LookBusy.Test;
 
-using System;
-using System.Collections.Generic;
-using LookBusy;
 using Xunit;
 
 public sealed class PooledStringTests : IDisposable
@@ -540,7 +537,7 @@ public sealed class PooledStringTests : IDisposable
 		// Test with various string patterns
 		var testStrings = new[] {
 			"", "a", "Hello World", "The quick brown fox jumps over the lazy dog", "12345678901234567890", "Special chars: !@#$%^&*()",
-			"Unicode: 你好世界 🌍", "  spaces  at  various  positions  ", "\t\n\r", new string('x', 100)
+			"Unicode: 你好世界 🌍", "  spaces  at  various  positions  ", "\t\n\r", new string('x', 100),
 		};
 
 		foreach (var testString in testStrings) {

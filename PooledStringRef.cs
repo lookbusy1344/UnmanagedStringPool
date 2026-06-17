@@ -1,14 +1,13 @@
 namespace LookBusy;
 
-using System;
 using System.Buffers;
 
 /// <summary>
-/// 16-byte handle to a string in a <see cref="SegmentedStringPool"/>. <see cref="default"/> is
-/// the empty sentinel; real allocations have generation ≥ 1. Content-based equality.
-/// <para>
-/// Disposing any copy invalidates all copies via generation bump on free.
-/// </para>
+///     16-byte handle to a string in a <see cref="SegmentedStringPool" />. <see cref="default" /> is
+///     the empty sentinel; real allocations have generation ≥ 1. Content-based equality.
+///     <para>
+///         Disposing any copy invalidates all copies via generation bump on free.
+///     </para>
 /// </summary>
 public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef>
 {
@@ -37,8 +36,8 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 	public ReadOnlySpan<char> AsSpan() => IsEmpty ? [] : Pool!.ReadSlot(SlotIndex, Generation);
 
 	/// <summary>
-	/// Returns the allocation to the pool. Idempotent: double-free, free-after-pool-dispose,
-	/// and free-of-a-stale-ref all silently no-op via the generation check in <c>TryReadSlot</c>.
+	///     Returns the allocation to the pool. Idempotent: double-free, free-after-pool-dispose,
+	///     and free-of-a-stale-ref all silently no-op via the generation check in <c>TryReadSlot</c>.
 	/// </summary>
 	public void Free() => Pool?.FreeSlot(SlotIndex, Generation);
 
@@ -47,10 +46,10 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 	// ---- query methods ----
 
 	public int IndexOf(ReadOnlySpan<char> value, StringComparison c = StringComparison.Ordinal) =>
-		IsEmpty ? (value.IsEmpty ? 0 : -1) : AsSpan().IndexOf(value, c);
+		IsEmpty ? value.IsEmpty ? 0 : -1 : AsSpan().IndexOf(value, c);
 
 	public int LastIndexOf(ReadOnlySpan<char> value, StringComparison c = StringComparison.Ordinal) =>
-		IsEmpty ? (value.IsEmpty ? 0 : -1) : AsSpan().LastIndexOf(value, c);
+		IsEmpty ? value.IsEmpty ? 0 : -1 : AsSpan().LastIndexOf(value, c);
 
 	public bool StartsWith(ReadOnlySpan<char> value, StringComparison c = StringComparison.Ordinal) =>
 		IsEmpty ? value.IsEmpty : AsSpan().StartsWith(value, c);
@@ -67,9 +66,11 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 		if ((uint)startIndex > (uint)span.Length) {
 			throw new ArgumentOutOfRangeException(nameof(startIndex));
 		}
+
 		if ((uint)length > (uint)(span.Length - startIndex)) {
 			throw new ArgumentOutOfRangeException(nameof(length));
 		}
+
 		return span.Slice(startIndex, length);
 	}
 
@@ -80,6 +81,7 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 		if (IsEmpty) {
 			return Empty;
 		}
+
 		return Pool!.Allocate(AsSpan());
 	}
 
@@ -88,16 +90,19 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 		if (Pool is null) {
 			return Empty;
 		}
+
 		var original = AsSpan();
 		if ((uint)index > (uint)original.Length) {
 			throw new ArgumentOutOfRangeException(nameof(index));
 		}
+
 		if (value.IsEmpty) {
 			return Duplicate();
 		}
+
 		var totalLength = checked(original.Length + value.Length);
 		char[]? rented = null;
-		Span<char> buffer = totalLength <= 256
+		var buffer = totalLength <= 256
 			? stackalloc char[totalLength]
 			: (rented = ArrayPool<char>.Shared.Rent(totalLength)).AsSpan(0, totalLength);
 
@@ -120,9 +125,11 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 		if (Pool is null) {
 			return Empty;
 		}
+
 		if (oldValue.IsEmpty) {
 			throw new ArgumentException("oldValue cannot be empty.", nameof(oldValue));
 		}
+
 		var source = AsSpan();
 		if (source.IsEmpty) {
 			return Empty;
@@ -130,12 +137,12 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 
 		// Upper bound on possible matches: source.Length / oldValue.Length + 1.
 		// Renting once upfront avoids the doubling churn (64→128→256…) of the old strategy.
-		var maxMatches = Math.Max(ReplaceInlineMatchCap, source.Length / oldValue.Length + 1);
+		var maxMatches = Math.Max(ReplaceInlineMatchCap, (source.Length / oldValue.Length) + 1);
 		Span<int> inlineMatches = stackalloc int[ReplaceInlineMatchCap];
-		int[]? rentedMatches = maxMatches > ReplaceInlineMatchCap
+		var rentedMatches = maxMatches > ReplaceInlineMatchCap
 			? ArrayPool<int>.Shared.Rent(maxMatches)
 			: null;
-		Span<int> matches = rentedMatches is not null ? rentedMatches.AsSpan(0, maxMatches) : inlineMatches;
+		var matches = rentedMatches is not null ? rentedMatches.AsSpan(0, maxMatches) : inlineMatches;
 		var matchCount = 0;
 
 		var searchStart = 0;
@@ -144,6 +151,7 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 			if (found < 0) {
 				break;
 			}
+
 			var absolute = searchStart + found;
 			matches[matchCount++] = absolute;
 			searchStart = absolute + oldValue.Length;
@@ -153,6 +161,7 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 			if (rentedMatches is not null) {
 				ArrayPool<int>.Shared.Return(rentedMatches);
 			}
+
 			return Duplicate();
 		}
 
@@ -161,7 +170,7 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 			// checked: source.Length + matchCount*(delta) can overflow int when the replacement
 			// string is much larger than the old value and there are many matches.
 			var totalLength = checked(source.Length + (matchCount * (newValue.Length - oldValue.Length)));
-			Span<char> buffer = totalLength <= 256
+			var buffer = totalLength <= 256
 				? stackalloc char[totalLength]
 				: (rentedChars = ArrayPool<char>.Shared.Rent(totalLength)).AsSpan(0, totalLength);
 
@@ -176,6 +185,7 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 				dstCursor += newValue.Length;
 				srcCursor = matchAt + oldValue.Length;
 			}
+
 			source.Slice(srcCursor).CopyTo(buffer.Slice(dstCursor));
 
 			return Pool.Allocate(buffer);
@@ -184,6 +194,7 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 			if (rentedMatches is not null) {
 				ArrayPool<int>.Shared.Return(rentedMatches);
 			}
+
 			if (rentedChars is not null) {
 				ArrayPool<char>.Shared.Return(rentedChars);
 			}
@@ -206,18 +217,21 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 		if (span.IsEmpty) {
 			return 0;
 		}
+
 		var hc = new HashCode();
 		hc.Add(span.Length);
 		var prefix = span.Slice(0, Math.Min(8, span.Length));
 		foreach (var ch in prefix) {
 			hc.Add(ch);
 		}
+
 		if (span.Length > 8) {
 			var suffix = span.Slice(Math.Max(span.Length - 8, 8));
 			foreach (var ch in suffix) {
 				hc.Add(ch);
 			}
 		}
+
 		return hc.ToHashCode();
 	}
 

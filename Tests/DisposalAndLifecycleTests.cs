@@ -1,8 +1,5 @@
 namespace LookBusy.Test;
 
-using System;
-using System.Collections.Generic;
-using LookBusy;
 using Xunit;
 
 public class DisposalAndLifecycleTests

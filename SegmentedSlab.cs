@@ -1,22 +1,21 @@
 namespace LookBusy;
 
-using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 /// <summary>
-/// A single slab of fixed-size cells backed by unmanaged memory. Cells are tracked via a bitmap
-/// (1 = free, 0 = used). Allocation uses <see cref="BitOperations.TrailingZeroCount(ulong)"/> to
-/// locate the first free cell in O(1).
+///     A single slab of fixed-size cells backed by unmanaged memory. Cells are tracked via a bitmap
+///     (1 = free, 0 = used). Allocation uses <see cref="BitOperations.TrailingZeroCount(ulong)" /> to
+///     locate the first free cell in O(1).
 /// </summary>
 internal sealed class SegmentedSlab : IDisposable
 {
-	public readonly int SizeClass;
+	private readonly ulong[] bitmap;
 	public readonly IntPtr Buffer;
 	private readonly int cellBytes;
 	private readonly int cellCount;
-	private readonly ulong[] bitmap;
+	public readonly int SizeClass;
 	private bool disposed;
 
 	public SegmentedSlab(int sizeClass, int cellBytes, int cellCount)
@@ -45,9 +44,17 @@ internal sealed class SegmentedSlab : IDisposable
 
 	public SegmentedSlab? NextInClass { get; set; }
 
+	public long UnmanagedBytes => (long)cellBytes * cellCount;
+
+	public void Dispose()
+	{
+		Dispose(true);
+		GC.SuppressFinalize(this);
+	}
+
 	/// <summary>
-	/// Allocates the first free cell using <see cref="BitOperations.TrailingZeroCount(ulong)"/> to find the lowest set bit
-	/// (set = free under the 1=free convention). Returns false if the slab is full.
+	///     Allocates the first free cell using <see cref="BitOperations.TrailingZeroCount(ulong)" /> to find the lowest set bit
+	///     (set = free under the 1=free convention). Returns false if the slab is full.
 	/// </summary>
 	public bool TryAllocateCell(out int cellIndex)
 	{
@@ -106,8 +113,8 @@ internal sealed class SegmentedSlab : IDisposable
 	}
 
 	/// <summary>
-	/// Resets the bitmap to all-free without freeing the unmanaged buffer. Used by <c>pool.Clear()</c> to
-	/// reclaim cell space while reusing the already-allocated slab memory.
+	///     Resets the bitmap to all-free without freeing the unmanaged buffer. Used by <c>pool.Clear()</c> to
+	///     reclaim cell space while reusing the already-allocated slab memory.
 	/// </summary>
 	public void ResetAllCellsFree()
 	{
@@ -130,18 +137,10 @@ internal sealed class SegmentedSlab : IDisposable
 		}
 	}
 
-	public long UnmanagedBytes => (long)cellBytes * cellCount;
-
-	public void Dispose()
-	{
-		Dispose(true);
-		GC.SuppressFinalize(this);
-	}
-
 	/// <summary>
-	/// Dispose pattern: disposing=true means Dispose() was called explicitly; disposing=false means finalizer is running.
-	/// Currently only unmanaged resources (Buffer) need cleanup, so the parameter is unused. If managed resources
-	/// (e.g., IDisposable fields) are added later, they should only be disposed when disposing=true.
+	///     Dispose pattern: disposing=true means Dispose() was called explicitly; disposing=false means finalizer is running.
+	///     Currently only unmanaged resources (Buffer) need cleanup, so the parameter is unused. If managed resources
+	///     (e.g., IDisposable fields) are added later, they should only be disposed when disposing=true.
 	/// </summary>
 	// ReSharper disable once UnusedParameter.Local
 	private void Dispose(bool disposing)

@@ -1,18 +1,16 @@
 // ReSharper disable ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
+
 namespace LookBusy;
 
-using System;
-using System.Collections.Generic;
-
 /// <summary>
-/// Owns the list of <see cref="SegmentedArenaSegment"/> instances and routes allocation across
-/// them. New segments are added when existing ones can't satisfy a request. Never resizes or
-/// moves an existing segment.
+///     Owns the list of <see cref="SegmentedArenaSegment" /> instances and routes allocation across
+///     them. New segments are added when existing ones can't satisfy a request. Never resizes or
+///     moves an existing segment.
 /// </summary>
 internal sealed class SegmentedArenaTier : IDisposable
 {
-	private readonly List<SegmentedArenaSegment> segments = [];
 	private readonly int defaultSegmentBytes;
+	private readonly List<SegmentedArenaSegment> segments = [];
 	private bool disposed;
 
 	public SegmentedArenaTier(int segmentBytes)
@@ -22,6 +20,18 @@ internal sealed class SegmentedArenaTier : IDisposable
 	}
 
 	public int SegmentCount => segments.Count;
+
+	public void Dispose()
+	{
+		if (disposed) { return; }
+
+		disposed = true;
+		foreach (var s in segments) {
+			s.Dispose();
+		}
+
+		segments.Clear();
+	}
 
 	public long GetUnmanagedBytes()
 	{
@@ -34,14 +44,14 @@ internal sealed class SegmentedArenaTier : IDisposable
 	}
 
 	/// <summary>
-	/// Allocates <paramref name="byteCount"/> bytes from the first segment that can satisfy the request.
-	/// If no existing segment has room, a new one is appended. New segments are sized as
-	/// <c>max(defaultSegmentBytes, byteCount)</c> so a single oversized string gets its own dedicated segment.
-	/// <para>
-	/// <paramref name="allocatedBytes"/> receives the true bytes handed out (see
-	/// <see cref="SegmentedArenaSegment.TryAllocate"/>). The caller must store this value and supply it
-	/// when freeing so no-split slack is not orphaned.
-	/// </para>
+	///     Allocates <paramref name="byteCount" /> bytes from the first segment that can satisfy the request.
+	///     If no existing segment has room, a new one is appended. New segments are sized as
+	///     <c>max(defaultSegmentBytes, byteCount)</c> so a single oversized string gets its own dedicated segment.
+	///     <para>
+	///         <paramref name="allocatedBytes" /> receives the true bytes handed out (see
+	///         <see cref="SegmentedArenaSegment.TryAllocate" />). The caller must store this value and supply it
+	///         when freeing so no-split slack is not orphaned.
+	///     </para>
 	/// </summary>
 	public IntPtr Allocate(int byteCount, out SegmentedArenaSegment owningSegment, out int allocatedBytes)
 	{
@@ -71,20 +81,21 @@ internal sealed class SegmentedArenaTier : IDisposable
 		if (!segment.TryAllocate(normalizedByteCount, out var newPtr, out allocatedBytes)) {
 			throw new InvalidOperationException("Fresh arena segment could not satisfy the requested allocation");
 		}
+
 		owningSegment = segment;
 		return newPtr;
 	}
 
 	/// <summary>
-	/// Frees a block back to its owning segment. The caller must supply the segment directly
-	/// (resolved by <see cref="LocateSegmentByPointer"/>) so this method stays O(1).
+	///     Frees a block back to its owning segment. The caller must supply the segment directly
+	///     (resolved by <see cref="LocateSegmentByPointer" />) so this method stays O(1).
 	/// </summary>
 	public static void Free(IntPtr ptr, int byteCount, SegmentedArenaSegment segment) =>
 		segment.Free(ptr, byteCount);
 
 	/// <summary>
-	/// Returns the segment that owns <paramref name="ptr"/>. O(number of segments).
-	/// Called only during <see cref="Free"/>, not on the read path.
+	///     Returns the segment that owns <paramref name="ptr" />. O(number of segments).
+	///     Called only during <see cref="Free" />, not on the read path.
 	/// </summary>
 	public SegmentedArenaSegment LocateSegmentByPointer(IntPtr ptr)
 	{
@@ -98,8 +109,8 @@ internal sealed class SegmentedArenaTier : IDisposable
 	}
 
 	/// <summary>
-	/// Resets every segment's bump pointer and bin heads without freeing unmanaged memory.
-	/// Used by <c>pool.Clear()</c>; segments are reused for subsequent allocations.
+	///     Resets every segment's bump pointer and bin heads without freeing unmanaged memory.
+	///     Used by <c>pool.Clear()</c>; segments are reused for subsequent allocations.
 	/// </summary>
 	public void ResetAll()
 	{
@@ -122,17 +133,5 @@ internal sealed class SegmentedArenaTier : IDisposable
 			segments.Add(new(next));
 			totalBytes += next;
 		}
-	}
-
-	public void Dispose()
-	{
-		if (disposed) { return; }
-
-		disposed = true;
-		foreach (var s in segments) {
-			s.Dispose();
-		}
-
-		segments.Clear();
 	}
 }

@@ -1,12 +1,14 @@
 # UnmanagedStringPool Test Suite
 
-This directory contains comprehensive tests for the UnmanagedStringPool implementation, covering all aspects of unmanaged memory allocation, string pool management, and thread safety.
+This directory contains comprehensive tests for the UnmanagedStringPool implementation, covering all aspects of unmanaged memory allocation, string
+pool management, and thread safety.
 
 ## Test Files Overview
 
 ### Core Functionality Tests
 
 **`UnmanagedStringPoolTests.cs`** - *Basic pool operations and API coverage*
+
 - Constructor validation and initialization
 - Basic string allocation and deallocation
 - Pool capacity and growth behavior
@@ -14,6 +16,7 @@ This directory contains comprehensive tests for the UnmanagedStringPool implemen
 - Standard use case scenarios
 
 **`PooledStringTests.cs`** - *PooledString struct operations and manipulations*
+
 - String manipulation methods (Insert, Replace, Remove, Trim)
 - Substring operations and span creation
 - String comparison and equality testing
@@ -24,6 +27,7 @@ This directory contains comprehensive tests for the UnmanagedStringPool implemen
 ### Memory Management Tests
 
 **`FragmentationAndMemoryTests.cs`** - *Memory allocation patterns and optimization*
+
 - Fragmentation creation, detection, and measurement
 - Free block reuse and coalescing behavior
 - Memory alignment verification
@@ -33,12 +37,14 @@ This directory contains comprehensive tests for the UnmanagedStringPool implemen
 - Stress testing with interleaved operations
 
 **`FragmentationTest.cs`** - *Specific fragmentation scenario testing*
+
 - Focused fragmentation pattern creation
 - Fragmentation percentage calculation validation
 - Defragmentation trigger testing
 - Memory compaction verification
 
 **`FinalizerBehaviorTests.cs`** - *Unmanaged resource cleanup and finalizer execution*
+
 - Finalizer execution without explicit disposal
 - Memory leak prevention validation
 - Finalizer thread safety testing
@@ -47,6 +53,7 @@ This directory contains comprehensive tests for the UnmanagedStringPool implemen
 - Resource cleanup verification
 
 **`IntegerOverflowTests.cs`** - *Boundary conditions and overflow protection*
+
 - Constructor parameter overflow detection
 - String allocation size overflow prevention
 - Pool growth calculation overflow handling
@@ -57,6 +64,7 @@ This directory contains comprehensive tests for the UnmanagedStringPool implemen
 ### Advanced Behavior Tests
 
 **`UnmanagedStringPoolEdgeCaseTests.cs`** - *Edge cases and boundary conditions*
+
 - Minimum and maximum capacity handling
 - Very large string allocations
 - Zero-length and null string handling
@@ -65,6 +73,7 @@ This directory contains comprehensive tests for the UnmanagedStringPool implemen
 - Boundary value testing
 
 **`ConcurrentAccessTests.cs`** - *Thread safety and concurrent operations*
+
 - Multi-threaded read operation safety
 - Concurrent allocation stress testing
 - Thread safety validation for read-only operations
@@ -73,6 +82,7 @@ This directory contains comprehensive tests for the UnmanagedStringPool implemen
 - Performance under concurrent load
 
 **`DisposalAndLifecycleTests.cs`** - *Resource lifecycle management*
+
 - Proper disposal behavior
 - Resource cleanup validation
 - String invalidation after pool disposal
@@ -81,6 +91,7 @@ This directory contains comprehensive tests for the UnmanagedStringPool implemen
 - Lifecycle state management
 
 **`ClearMethodTests.cs`** - *Pool reset and clear operations*
+
 - Pool state reset functionality
 - Memory clearing behavior
 - String invalidation after clear
@@ -91,6 +102,7 @@ This directory contains comprehensive tests for the UnmanagedStringPool implemen
 ## Test Organization Principles
 
 ### Test Coverage Areas
+
 - **Functional Correctness**: All public APIs work as documented
 - **Memory Safety**: No memory leaks, proper cleanup, overflow prevention
 - **Thread Safety**: Concurrent read operations are safe
@@ -99,6 +111,7 @@ This directory contains comprehensive tests for the UnmanagedStringPool implemen
 - **Resource Management**: Proper disposal and finalizer behavior
 
 ### Test Quality Standards
+
 - Comprehensive parameter validation testing
 - Stress testing with large data sets
 - Boundary condition validation
@@ -107,6 +120,7 @@ This directory contains comprehensive tests for the UnmanagedStringPool implemen
 - Performance regression prevention
 
 ### Test Infrastructure
+
 - Uses xUnit testing framework
 - IDisposable pattern for test fixtures
 - Comprehensive assertions with meaningful error messages

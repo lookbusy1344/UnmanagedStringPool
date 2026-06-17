@@ -1,12 +1,10 @@
 namespace LookBusy.Test;
 
-using System;
-using LookBusy;
 using Xunit;
 
 public sealed class SegmentedSlabTierTests : IDisposable
 {
-	private readonly SegmentedSlabTier tier = new(cellsPerSlab: 4);
+	private readonly SegmentedSlabTier tier = new(4);
 
 	public void Dispose()
 	{
@@ -37,7 +35,7 @@ public sealed class SegmentedSlabTierTests : IDisposable
 	[Fact]
 	public void Allocate_SmallString_ReturnsPointerIntoAnySlab()
 	{
-		var ptr = tier.Allocate(charCount: 5, out var slabRef);
+		var ptr = tier.Allocate(5, out var slabRef);
 		Assert.NotEqual(IntPtr.Zero, ptr);
 		Assert.NotNull(slabRef);
 	}
@@ -48,6 +46,7 @@ public sealed class SegmentedSlabTierTests : IDisposable
 		for (var i = 0; i < 4; ++i) {
 			_ = tier.Allocate(5, out _);
 		}
+
 		_ = tier.Allocate(5, out _);
 		Assert.True(tier.SlabCount >= 2);
 	}
@@ -68,6 +67,7 @@ public sealed class SegmentedSlabTierTests : IDisposable
 			_ = tier.Allocate(5, out var s);
 			slabA = s;
 		}
+
 		Assert.NotNull(slabA);
 		Assert.True(slabA!.IsFull);
 
@@ -83,6 +83,7 @@ public sealed class SegmentedSlabTierTests : IDisposable
 		for (var i = 1; i < 4; ++i) {
 			_ = tier.Allocate(5, out _);
 		}
+
 		Assert.True(slabA.IsFull);
 
 		_ = tier.Allocate(5, out var slabB);
@@ -108,6 +109,7 @@ public sealed class SegmentedSlabTierTests : IDisposable
 			_ = tier.Allocate(5, out var s);
 			Assert.Same(slabA, s);
 		}
+
 		Assert.Equal(1, tier.SlabCount);
 	}
 
@@ -120,6 +122,7 @@ public sealed class SegmentedSlabTierTests : IDisposable
 			_ = tier.Allocate(5, out var s);
 			slabA = s;
 		}
+
 		_ = tier.Allocate(5, out var slabB);
 		Assert.True(slabA!.IsFull);
 
@@ -131,6 +134,7 @@ public sealed class SegmentedSlabTierTests : IDisposable
 		for (var i = 0; i < 4; ++i) {
 			_ = tier.Allocate(5, out _);
 		}
+
 		_ = tier.Allocate(5, out _);
 		Assert.Equal(slabCountBefore, tier.SlabCount);
 	}
@@ -145,6 +149,7 @@ public sealed class SegmentedSlabTierTests : IDisposable
 		for (var i = 0; i < 4; ++i) {
 			_ = tier.Allocate(5, out slab0);
 		}
+
 		Assert.True(slab0!.IsFull);
 		var slabCountAfterFill = tier.SlabCount;
 

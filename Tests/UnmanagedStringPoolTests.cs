@@ -1,9 +1,5 @@
 namespace LookBusy.Test;
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using LookBusy;
 using Xunit;
 
 public sealed class UnmanagedStringPoolTests : IDisposable
@@ -184,7 +180,7 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 	[Fact]
 	public void AllowGrowth_WhenTrue_AutomaticallyGrowsPool()
 	{
-		using var smallPool = new UnmanagedStringPool(10, true);
+		using var smallPool = new UnmanagedStringPool(10);
 
 		// Fill the pool
 		var str1 = smallPool.Allocate("12345");

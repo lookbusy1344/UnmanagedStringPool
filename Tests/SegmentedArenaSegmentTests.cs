@@ -1,12 +1,11 @@
 namespace LookBusy.Test;
 
-using System;
-using LookBusy;
+using System.Reflection;
 using Xunit;
 
 public sealed class SegmentedArenaSegmentTests : IDisposable
 {
-	private readonly SegmentedArenaSegment segment = new(capacity: 4096);
+	private readonly SegmentedArenaSegment segment = new(4096);
 
 	public void Dispose()
 	{
@@ -24,7 +23,7 @@ public sealed class SegmentedArenaSegmentTests : IDisposable
 	[Fact]
 	public void TryAllocate_FromEmpty_UsesBump()
 	{
-		var ok = segment.TryAllocate(byteCount: 128, out var ptr, out var actualBytes);
+		var ok = segment.TryAllocate(128, out var ptr, out var actualBytes);
 		Assert.True(ok);
 		Assert.Equal(segment.Buffer, ptr);
 		Assert.Equal(128, segment.BumpOffset);
@@ -32,22 +31,17 @@ public sealed class SegmentedArenaSegmentTests : IDisposable
 	}
 
 	[Fact]
-	public void TryAllocate_BeyondCapacity_ReturnsFalse()
-	{
-		Assert.False(segment.TryAllocate(byteCount: 8192, out _, out _));
-	}
+	public void TryAllocate_BeyondCapacity_ReturnsFalse() => Assert.False(segment.TryAllocate(8192, out _, out _));
 
 	[Fact]
-	public void TryAllocate_AlignmentOverflow_Throws()
-	{
+	public void TryAllocate_AlignmentOverflow_Throws() =>
 		_ = Assert.Throws<OverflowException>(() => segment.TryAllocate(int.MaxValue - 3, out _, out _));
-	}
 
 	[Fact]
 	public void TryAllocate_BumpOffsetOverflow_DoesNotAllocate()
 	{
 		var backingField = typeof(SegmentedArenaSegment).GetField("<BumpOffset>k__BackingField",
-			System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+			BindingFlags.Instance | BindingFlags.NonPublic);
 		Assert.NotNull(backingField);
 		backingField!.SetValue(segment, int.MaxValue - 8);
 
@@ -83,7 +77,7 @@ public sealed class SegmentedArenaSegmentTests : IDisposable
 		Assert.Equal(ptr, first);
 		Assert.Equal(256, firstActual); // split path: actualBytes == requested aligned size
 		_ = segment.TryAllocate(256, out var second, out _);
-		Assert.Equal(new IntPtr(ptr.ToInt64() + 256), second);
+		Assert.Equal(new(ptr.ToInt64() + 256), second);
 	}
 
 	[Fact]
@@ -179,7 +173,7 @@ public sealed class SegmentedArenaSegmentTests : IDisposable
 	{
 		// Use a segment sized to exactly hold 3×256-byte blocks so the bump allocator
 		// is exhausted after the initial allocations and only the free list is available.
-		using var tight = new SegmentedArenaSegment(capacity: 768);
+		using var tight = new SegmentedArenaSegment(768);
 		_ = tight.TryAllocate(256, out var a, out _);
 		_ = tight.TryAllocate(256, out _, out _); // live barrier between a and c
 		_ = tight.TryAllocate(256, out var c, out _);

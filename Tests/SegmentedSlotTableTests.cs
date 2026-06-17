@@ -1,6 +1,6 @@
 namespace LookBusy.Test;
 
-using LookBusy;
+using System.Reflection;
 using Xunit;
 
 public sealed class SegmentedSlotEntryEncodingTests
@@ -56,7 +56,7 @@ public sealed class SegmentedSlotTableTests
 	public void Allocate_FirstSlot_ReturnsSlotZeroAndGenOne()
 	{
 		var table = new SegmentedSlotTable(16);
-		var (slot, gen) = table.Allocate(ptr: (IntPtr)0x1000, lengthChars: 5, owner: null, allocatedBytes: 0);
+		var (slot, gen) = table.Allocate(0x1000, 5, null, 0);
 		Assert.Equal(0u, slot);
 		Assert.Equal(1u, gen);
 		Assert.Equal(1, table.ActiveCount);
@@ -66,9 +66,9 @@ public sealed class SegmentedSlotTableTests
 	public void Allocate_Multiple_AssignsSequentialSlots()
 	{
 		var table = new SegmentedSlotTable(16);
-		var (s0, _) = table.Allocate((IntPtr)0x100, 1, null, 0);
-		var (s1, _) = table.Allocate((IntPtr)0x200, 2, null, 0);
-		var (s2, _) = table.Allocate((IntPtr)0x300, 3, null, 0);
+		var (s0, _) = table.Allocate(0x100, 1, null, 0);
+		var (s1, _) = table.Allocate(0x200, 2, null, 0);
+		var (s2, _) = table.Allocate(0x300, 3, null, 0);
 		Assert.Equal(0u, s0);
 		Assert.Equal(1u, s1);
 		Assert.Equal(2u, s2);
@@ -78,10 +78,10 @@ public sealed class SegmentedSlotTableTests
 	public void TryReadSlot_ValidHandle_ReturnsPtrAndLength()
 	{
 		var table = new SegmentedSlotTable(16);
-		var (slot, gen) = table.Allocate((IntPtr)0xABCD, 7, null, 0);
+		var (slot, gen) = table.Allocate(0xABCD, 7, null, 0);
 		var ok = table.TryReadSlot(slot, gen, out var entry);
 		Assert.True(ok);
-		Assert.Equal((IntPtr)0xABCD, entry.Ptr);
+		Assert.Equal(0xABCD, entry.Ptr);
 		Assert.Equal(7, entry.LengthChars);
 	}
 
@@ -89,7 +89,7 @@ public sealed class SegmentedSlotTableTests
 	public void Free_BumpsGeneration_AndMarksFree()
 	{
 		var table = new SegmentedSlotTable(16);
-		var (slot, gen) = table.Allocate((IntPtr)0x100, 1, null, 0);
+		var (slot, gen) = table.Allocate(0x100, 1, null, 0);
 		var freed = table.Free(slot, gen);
 		Assert.True(freed);
 		Assert.Equal(0, table.ActiveCount);
@@ -99,9 +99,9 @@ public sealed class SegmentedSlotTableTests
 	public void Free_StaleGeneration_ReturnsFalse_AndDoesNotDoubleFree()
 	{
 		var table = new SegmentedSlotTable(16);
-		var (slot, gen) = table.Allocate((IntPtr)0x100, 1, null, 0);
+		var (slot, gen) = table.Allocate(0x100, 1, null, 0);
 		Assert.True(table.Free(slot, gen));
-		Assert.False(table.Free(slot, gen));     // already freed, handle stale
+		Assert.False(table.Free(slot, gen)); // already freed, handle stale
 		Assert.Equal(0, table.ActiveCount);
 	}
 
@@ -109,7 +109,7 @@ public sealed class SegmentedSlotTableTests
 	public void TryReadSlot_StaleHandle_ReturnsFalse()
 	{
 		var table = new SegmentedSlotTable(16);
-		var (slot, gen) = table.Allocate((IntPtr)0x100, 1, null, 0);
+		var (slot, gen) = table.Allocate(0x100, 1, null, 0);
 		_ = table.Free(slot, gen);
 		Assert.False(table.TryReadSlot(slot, gen, out _));
 	}
@@ -118,18 +118,18 @@ public sealed class SegmentedSlotTableTests
 	public void Allocate_AfterFree_ReusesSlotWithNewGeneration()
 	{
 		var table = new SegmentedSlotTable(16);
-		var (s0, g0) = table.Allocate((IntPtr)0x100, 1, null, 0);
+		var (s0, g0) = table.Allocate(0x100, 1, null, 0);
 		_ = table.Free(s0, g0);
-		var (s1, g1) = table.Allocate((IntPtr)0x200, 2, null, 0);
+		var (s1, g1) = table.Allocate(0x200, 2, null, 0);
 		Assert.Equal(s0, s1);
-		Assert.NotEqual(g0, g1);                 // generation incremented twice (free+alloc)
+		Assert.NotEqual(g0, g1); // generation incremented twice (free+alloc)
 	}
 
 	[Fact]
 	public void Free_AtGenerationExhaustion_RetiresSlot()
 	{
 		var table = new SegmentedSlotTable(4);
-		var (slot, gen) = table.Allocate((IntPtr)0x100, 1, null, 0);
+		var (slot, gen) = table.Allocate(0x100, 1, null, 0);
 		ref var entry = ref table.SlotRef(slot);
 		entry.Generation = SegmentedConstants.GenerationMask;
 
@@ -143,13 +143,13 @@ public sealed class SegmentedSlotTableTests
 	public void Allocate_AfterRetirement_DoesNotReuseRetiredSlot()
 	{
 		var table = new SegmentedSlotTable(2);
-		var (slot0, _) = table.Allocate((IntPtr)0x100, 1, null, 0);
+		var (slot0, _) = table.Allocate(0x100, 1, null, 0);
 		ref var entry = ref table.SlotRef(slot0);
 		entry.Generation = SegmentedConstants.GenerationMask;
 
 		Assert.True(table.Free(slot0, SegmentedConstants.GenerationMask));
 
-		var (slot1, _) = table.Allocate((IntPtr)0x200, 2, null, 0);
+		var (slot1, _) = table.Allocate(0x200, 2, null, 0);
 		Assert.NotEqual(slot0, slot1);
 		Assert.True(table.SlotRef(slot0).Retired);
 	}
@@ -157,10 +157,11 @@ public sealed class SegmentedSlotTableTests
 	[Fact]
 	public void Allocate_BeyondInitialCapacity_Grows()
 	{
-		var table = new SegmentedSlotTable(initialCapacity: 4);
+		var table = new SegmentedSlotTable(4);
 		for (var i = 0; i < 10; ++i) {
-			_ = table.Allocate((IntPtr)(0x100 + i), 1, null, 0);
+			_ = table.Allocate(0x100 + i, 1, null, 0);
 		}
+
 		Assert.Equal(10, table.ActiveCount);
 	}
 
@@ -176,10 +177,11 @@ public sealed class SegmentedSlotTableTests
 	[Fact]
 	public void ClearAllSlots_WithLargeTable_ShrinksToInitialCapacity()
 	{
-		var table = new SegmentedSlotTable(initialCapacity: 16);
+		var table = new SegmentedSlotTable(16);
 		for (var i = 0; i < 64; ++i) {
-			_ = table.Allocate((IntPtr)(0x100 + i), 1, null, 0);
+			_ = table.Allocate(0x100 + i, 1, null, 0);
 		}
+
 		Assert.True(table.Capacity >= 64);
 		table.ClearAllSlots();
 		Assert.Equal(16, table.Capacity);
@@ -188,10 +190,11 @@ public sealed class SegmentedSlotTableTests
 	[Fact]
 	public void ClearAllSlots_NeverShrinksbelowInitialCapacity()
 	{
-		var table = new SegmentedSlotTable(initialCapacity: 16);
+		var table = new SegmentedSlotTable(16);
 		for (var i = 0; i < 100; ++i) {
-			_ = table.Allocate((IntPtr)(0x100 + i), 1, null, 0);
+			_ = table.Allocate(0x100 + i, 1, null, 0);
 		}
+
 		table.ClearAllSlots();
 		Assert.True(table.Capacity >= 16, $"Capacity dropped below initial: {table.Capacity}");
 	}
@@ -199,15 +202,16 @@ public sealed class SegmentedSlotTableTests
 	[Fact]
 	public void ClearAllSlots_AfterShrink_SubsequentAllocationsWork()
 	{
-		var table = new SegmentedSlotTable(initialCapacity: 16);
+		var table = new SegmentedSlotTable(16);
 		for (var i = 0; i < 64; ++i) {
-			_ = table.Allocate((IntPtr)(0x100 + i), 1, null, 0);
+			_ = table.Allocate(0x100 + i, 1, null, 0);
 		}
+
 		table.ClearAllSlots();
 		// After shrink, fresh allocations must succeed and indices must be valid.
-		var (slot, gen) = table.Allocate((IntPtr)0xDEAD, 5, null, 0);
+		var (slot, gen) = table.Allocate(0xDEAD, 5, null, 0);
 		Assert.True(table.TryReadSlot(slot, gen, out var entry));
-		Assert.Equal((IntPtr)0xDEAD, entry.Ptr);
+		Assert.Equal(0xDEAD, entry.Ptr);
 	}
 
 	[Fact]
@@ -218,7 +222,7 @@ public sealed class SegmentedSlotTableTests
 		table.ClearAllSlots(); // already empty — must not throw or corrupt state
 		Assert.Equal(0, table.ActiveCount);
 		// Subsequent alloc must still work.
-		var (slot, gen) = table.Allocate((IntPtr)0xABC, 1, null, 0);
+		var (slot, gen) = table.Allocate(0xABC, 1, null, 0);
 		Assert.True(table.TryReadSlot(slot, gen, out _));
 	}
 
@@ -227,36 +231,34 @@ public sealed class SegmentedSlotTableTests
 	{
 		// Shrink is scoped to ClearAllSlots; individual Free calls must not resize the array
 		// to avoid thrashing in bulk-alloc/bulk-free steady-state workloads.
-		var table = new SegmentedSlotTable(initialCapacity: 16);
+		var table = new SegmentedSlotTable(16);
 		var handles = new List<(uint slot, uint gen)>();
 		for (var i = 0; i < 64; ++i) {
-			handles.Add(table.Allocate((IntPtr)(0x100 + i), 1, null, 0));
+			handles.Add(table.Allocate(0x100 + i, 1, null, 0));
 		}
+
 		var peakCapacity = table.Capacity;
 		foreach (var (slot, gen) in handles) {
 			_ = table.Free(slot, gen);
 		}
+
 		Assert.Equal(peakCapacity, table.Capacity);
 	}
 
 	[Fact]
-	public void MarkFreeAndBumpGen_AtMax_ThrowsOverflowException()
-	{
+	public void MarkFreeAndBumpGen_AtMax_ThrowsOverflowException() =>
 		_ = Assert.Throws<OverflowException>(() => SegmentedSlotEntry.MarkFreeAndBumpGen(SegmentedConstants.GenerationMask));
-	}
 
 	[Fact]
-	public void TryMarkFreeAndBumpGen_AtMax_ReturnsFalse()
-	{
+	public void TryMarkFreeAndBumpGen_AtMax_ReturnsFalse() =>
 		Assert.False(SegmentedSlotEntry.TryMarkFreeAndBumpGen(SegmentedConstants.GenerationMask, out _));
-	}
 
 	[Fact]
 	public void StaleHandle_DoesNotBecomeValidAfterGenerationExhaustion()
 	{
-		using var pool = new SegmentedStringPool(new(InitialSlotCapacity: 2, SmallStringThresholdChars: 0));
+		using var pool = new SegmentedStringPool(new(2, SmallStringThresholdChars: 0));
 		var original = pool.Allocate("hi");
-		var slotsField = typeof(SegmentedStringPool).GetField("slots", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+		var slotsField = typeof(SegmentedStringPool).GetField("slots", BindingFlags.Instance | BindingFlags.NonPublic);
 		Assert.NotNull(slotsField);
 		var slots = (SegmentedSlotTable)slotsField!.GetValue(pool)!;
 		ref var entry = ref slots.SlotRef(original.SlotIndex);

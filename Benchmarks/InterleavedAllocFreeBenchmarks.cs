@@ -2,30 +2,27 @@
 namespace LookBusy.Benchmarks;
 
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Jobs;
 
-[SimpleJob(launchCount: 1, warmupCount: 1, iterationCount: 3)]
+[SimpleJob(1, 1, 3)]
 [MemoryDiagnoser]
 public class InterleavedAllocFreeBenchmarks
 {
 	private const int WindowSize = 3;
-
-	[Params(1_000, 10_000)]
-	public int N { get; set; }
-
-	[Params(8, 256)]
-	public int StringLength { get; set; }
-
-	private string _source = "";
 	private UnmanagedStringPool _legacy = null!;
 	private SegmentedStringPool _segmented = null!;
+
+	private string _source = "";
+
+	[Params(1_000, 10_000)] public int N { get; set; }
+
+	[Params(8, 256)] public int StringLength { get; set; }
 
 	[GlobalSetup]
 	public void Setup()
 	{
-		_source = new string('x', StringLength);
-		_legacy = new UnmanagedStringPool(N * StringLength * sizeof(char) * 4);
-		_segmented = new SegmentedStringPool();
+		_source = new('x', StringLength);
+		_legacy = new(N * StringLength * sizeof(char) * 4);
+		_segmented = new();
 		_segmented.Reserve(WindowSize * StringLength * 4);
 	}
 
@@ -41,8 +38,9 @@ public class InterleavedAllocFreeBenchmarks
 	{
 		var window = new string[WindowSize];
 		for (var i = 0; i < N; ++i) {
-			window[i % WindowSize] = new string('x', StringLength);
+			window[i % WindowSize] = new('x', StringLength);
 		}
+
 		return window[(N - 1) % WindowSize];
 	}
 
@@ -55,13 +53,16 @@ public class InterleavedAllocFreeBenchmarks
 			if (i >= WindowSize) {
 				window[slot].Free();
 			}
+
 			window[slot] = _legacy.Allocate(_source);
 		}
+
 		var last = window[(N - 1) % WindowSize];
 		var limit = Math.Min(N, WindowSize);
 		for (var i = 0; i < limit; ++i) {
 			window[i].Free();
 		}
+
 		return last;
 	}
 
@@ -74,13 +75,16 @@ public class InterleavedAllocFreeBenchmarks
 			if (i >= WindowSize) {
 				window[slot].Free();
 			}
+
 			window[slot] = _segmented.Allocate(_source);
 		}
+
 		var last = window[(N - 1) % WindowSize];
 		var limit = Math.Min(N, WindowSize);
 		for (var i = 0; i < limit; ++i) {
 			window[i].Free();
 		}
+
 		return last;
 	}
 }

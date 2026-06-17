@@ -1,7 +1,6 @@
 namespace LookBusy;
 
-using System;
-using System.Collections.Generic;
+using System.Diagnostics;
 
 /*	PooledString is a small immutable struct that represents a string allocated from an UnmanagedStringPool.
 	It holds a reference to the pool and an allocation ID, which together identify the actual string data in unmanaged memory.
@@ -22,63 +21,118 @@ using System.Collections.Generic;
 */
 
 /// <summary>
-/// Value type representing a string allocated from an unmanaged pool. Just a reference and an allocation ID, 12 bytes total.
+///     Value type representing a string allocated from an unmanaged pool. Just a reference and an allocation ID, 12 bytes total.
 /// </summary>
 /// <remarks>
-/// <para><b>Copy Behavior and Disposal:</b></para>
-/// <para>
-/// PooledString is a value type (struct) with reference semantics for the underlying memory.
-/// When you copy a PooledString (e.g., via assignment), both the original and the copy share
-/// the same allocation ID and point to the same memory in the pool.
-/// </para>
-/// <para>
-/// <b>Important:</b> Disposing any copy invalidates ALL copies of that PooledString.
-/// This is because disposal removes the allocation from the pool's internal tracking,
-/// making the allocation ID invalid for all structs that reference it.
-/// </para>
-/// <example>
-/// <code>
+///     <para>
+///         <b>Copy Behavior and Disposal:</b>
+///     </para>
+///     <para>
+///         PooledString is a value type (struct) with reference semantics for the underlying memory.
+///         When you copy a PooledString (e.g., via assignment), both the original and the copy share
+///         the same allocation ID and point to the same memory in the pool.
+///     </para>
+///     <para>
+///         <b>Important:</b> Disposing any copy invalidates ALL copies of that PooledString.
+///         This is because disposal removes the allocation from the pool's internal tracking,
+///         making the allocation ID invalid for all structs that reference it.
+///     </para>
+///     <example>
+///         <code>
 /// var original = pool.Allocate("Hello");
 /// var copy = original;  // Both share the same allocation
-///
+/// 
 /// original.Dispose();    // Frees the allocation
 /// // Now BOTH original and copy are invalid:
 /// copy.AsSpan();        // Throws ArgumentException
 /// original.AsSpan();    // Also throws ArgumentException
 /// </code>
-/// </example>
-/// <para>
-/// This behavior mirrors unmanaged memory semantics where freeing memory invalidates
-/// all pointers to it. Multiple disposals are safe (idempotent) - calling Dispose()
-/// on an already-freed PooledString has no effect.
-/// </para>
-/// <para>
-/// <b>Warning - Memory Leaks:</b> Reassigning a PooledString variable without first
-/// calling Dispose() will leak the original allocation. The original memory remains
-/// allocated in the pool but becomes unreferenced and inaccessible.
-/// </para>
-/// <example>
-/// <code>
+///     </example>
+///     <para>
+///         This behavior mirrors unmanaged memory semantics where freeing memory invalidates
+///         all pointers to it. Multiple disposals are safe (idempotent) - calling Dispose()
+///         on an already-freed PooledString has no effect.
+///     </para>
+///     <para>
+///         <b>Warning - Memory Leaks:</b> Reassigning a PooledString variable without first
+///         calling Dispose() will leak the original allocation. The original memory remains
+///         allocated in the pool but becomes unreferenced and inaccessible.
+///     </para>
+///     <example>
+///         <code>
 /// var str = pool.Allocate("Original");
 /// str = pool.Allocate("New");  // LEAK: "Original" is now unreferenced but still allocated
-///
+/// 
 /// // Correct approach:
 /// var str = pool.Allocate("Original");
 /// str.Dispose();                // Free the original allocation first
 /// str = pool.Allocate("New");   // Now safe to reassign
 /// </code>
-/// </example>
+///     </example>
 /// </remarks>
-[System.Diagnostics.DebuggerDisplay("{ToString(),nq}")]
+[DebuggerDisplay("{ToString(),nq}")]
 public readonly record struct PooledString(UnmanagedStringPool Pool, uint AllocationId) : IDisposable
 {
+	/// <summary>
+	///     Free the string back to the pool, if it is not empty
+	/// </summary>
+	/// <remarks>
+	///     <b>Warning:</b> This invalidates ALL copies of this PooledString, not just this instance.
+	///     See <see cref="Free" /> for details about copy behavior.
+	/// </remarks>
+	public void Dispose() => Free();
+
+	/// <summary>
+	///     Checks if the underlying pool is disposed before performing any operations
+	/// </summary>
+	private readonly void CheckDisposed()
+	{
+		if (Pool.IsDisposed) {
+			throw new ObjectDisposedException(nameof(PooledString));
+		}
+	}
+
+	/// <summary>
+	///     Internal mutate method to set part of the buffer. Note this doesn't actually mutate the PooledString itself, just the underlying pool.
+	/// </summary>
+	private readonly void SetAtPosition(int start, ReadOnlySpan<char> value)
+	{
+		CheckDisposed();
+
+		if (AllocationId == UnmanagedStringPool.EmptyStringAllocationId) {
+			throw new InvalidOperationException("Cannot mutate an empty string allocation");
+		}
+
+		// Get the current allocation info
+		var info = Pool.GetAllocationInfo(AllocationId);
+
+		// Check if the starting position is valid
+		if (start < 0) {
+			throw new ArgumentOutOfRangeException(nameof(start), "Start position cannot be negative");
+		}
+
+		// Check if the value will fit in the buffer
+		if (start + value.Length > info.LengthChars) {
+			throw new ArgumentOutOfRangeException(
+				nameof(value),
+				$"The provided value is too large to fit in the string at the specified position. Available space: {info.LengthChars - start}, required: {value.Length}");
+		}
+
+		// Copy the value to the target position
+		unsafe {
+			fixed (char* pChar = value) {
+				var dest = (void*)IntPtr.Add(info.Pointer, start * sizeof(char));
+				Buffer.MemoryCopy(pChar, dest, (info.LengthChars - start) * sizeof(char), value.Length * sizeof(char));
+			}
+		}
+	}
 	// NOTE this struct is technically immutable, but some methods mutate the underlying pool like SetAtPosition() and Free()
 	// It also implements IDisposable to call Free() automatically
 
 	#region Public API
 
 	/// <summary>
-	/// Get this string as a span for efficient reading
+	///     Get this string as a span for efficient reading
 	/// </summary>
 	public readonly ReadOnlySpan<char> AsSpan()
 	{
@@ -95,24 +149,24 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	}
 
 	/// <summary>
-	/// Free this string's memory back to the pool. This doesn't mutate the actual PooledString fields, it just updates the underlying pool
+	///     Free this string's memory back to the pool. This doesn't mutate the actual PooledString fields, it just updates the underlying pool
 	/// </summary>
 	/// <remarks>
-	/// <b>Warning:</b> This invalidates ALL copies of this PooledString, not just this instance.
-	/// Since PooledString is a value type, copies share the same allocation ID. Freeing any copy
-	/// removes the allocation from the pool, making all copies invalid.
-	/// Multiple calls to Free() on the same or different copies are safe (idempotent).
+	///     <b>Warning:</b> This invalidates ALL copies of this PooledString, not just this instance.
+	///     Since PooledString is a value type, copies share the same allocation ID. Freeing any copy
+	///     removes the allocation from the pool, making all copies invalid.
+	///     Multiple calls to Free() on the same or different copies are safe (idempotent).
 	/// </remarks>
 	public readonly void Free() => Pool?.FreeString(AllocationId);
 
 	/// <summary>
-	/// Creates a deep copy of this PooledString with a new allocation ID.
+	///     Creates a deep copy of this PooledString with a new allocation ID.
 	/// </summary>
 	/// <returns>A new PooledString with the same content but a different allocation ID</returns>
 	/// <remarks>
-	/// Unlike simple assignment which creates copies that share the same allocation,
-	/// Duplicate() allocates new memory in the pool for an independent copy.
-	/// The duplicated string will not be affected if the original is disposed, and vice versa.
+	///     Unlike simple assignment which creates copies that share the same allocation,
+	///     Duplicate() allocates new memory in the pool for an independent copy.
+	///     The duplicated string will not be affected if the original is disposed, and vice versa.
 	/// </remarks>
 	public readonly PooledString Duplicate()
 	{
@@ -129,7 +183,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	}
 
 	/// <summary>
-	/// Allocate a new PooledString with the given value at the specified position. Old PooledString is unchanged.
+	///     Allocate a new PooledString with the given value at the specified position. Old PooledString is unchanged.
 	/// </summary>
 	public readonly PooledString Insert(int pos, ReadOnlySpan<char> value)
 	{
@@ -172,7 +226,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	}
 
 	/// <summary>
-	/// Returns the zero-based index of the first occurrence of the specified string
+	///     Returns the zero-based index of the first occurrence of the specified string
 	/// </summary>
 	public readonly int IndexOf(ReadOnlySpan<char> value, StringComparison comparison = StringComparison.Ordinal)
 	{
@@ -184,7 +238,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	}
 
 	/// <summary>
-	/// Returns the zero-based index of the last occurrence of the specified string
+	///     Returns the zero-based index of the last occurrence of the specified string
 	/// </summary>
 	public readonly int LastIndexOf(ReadOnlySpan<char> value, StringComparison comparison = StringComparison.Ordinal)
 	{
@@ -196,7 +250,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	}
 
 	/// <summary>
-	/// Determines whether this string starts with the specified string
+	///     Determines whether this string starts with the specified string
 	/// </summary>
 	public readonly bool StartsWith(ReadOnlySpan<char> value, StringComparison comparison = StringComparison.Ordinal)
 	{
@@ -208,7 +262,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	}
 
 	/// <summary>
-	/// Determines whether this string ends with the specified string
+	///     Determines whether this string ends with the specified string
 	/// </summary>
 	public readonly bool EndsWith(ReadOnlySpan<char> value, StringComparison comparison = StringComparison.Ordinal)
 	{
@@ -220,7 +274,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	}
 
 	/// <summary>
-	/// Determines whether this string contains the specified string
+	///     Determines whether this string contains the specified string
 	/// </summary>
 	public readonly bool Contains(ReadOnlySpan<char> value, StringComparison comparison = StringComparison.Ordinal)
 	{
@@ -232,7 +286,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	}
 
 	/// <summary>
-	/// Gets the length of this string in characters
+	///     Gets the length of this string in characters
 	/// </summary>
 	public readonly int Length
 	{
@@ -249,12 +303,12 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	}
 
 	/// <summary>
-	/// Determines whether this string is empty
+	///     Determines whether this string is empty
 	/// </summary>
 	public readonly bool IsEmpty => AllocationId == UnmanagedStringPool.EmptyStringAllocationId || Length == 0;
 
 	/// <summary>
-	/// Extract a substring from this string, just a convenience method for AsSpan().Slice()
+	///     Extract a substring from this string, just a convenience method for AsSpan().Slice()
 	/// </summary>
 	public readonly ReadOnlySpan<char> SubstringSpan(int startIndex, int length)
 	{
@@ -273,7 +327,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	}
 
 	/// <summary>
-	/// Replace all occurrences of a substring with another string
+	///     Replace all occurrences of a substring with another string
 	/// </summary>
 	public readonly PooledString Replace(ReadOnlySpan<char> oldValue, ReadOnlySpan<char> newValue)
 	{
@@ -354,8 +408,8 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	}
 
 	/// <summary>
-	/// Value semantics comparison. Note this is a record struct, so == and != are already implemented
-	/// We override Equals to compare content rather than pool and allocation ID
+	///     Value semantics comparison. Note this is a record struct, so == and != are already implemented
+	///     We override Equals to compare content rather than pool and allocation ID
 	/// </summary>
 	public readonly bool Equals(PooledString other)
 	{
@@ -376,12 +430,12 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	}
 
 	/// <summary>
-	/// Convert to standard .NET string (allocates managed memory)
+	///     Convert to standard .NET string (allocates managed memory)
 	/// </summary>
 	public override readonly string ToString() => AsSpan().ToString();
 
 	/// <summary>
-	/// Hash code based on content
+	///     Hash code based on content
 	/// </summary>
 	public override readonly int GetHashCode()
 	{
@@ -420,58 +474,4 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	}
 
 	#endregion // public API
-
-	/// <summary>
-	/// Checks if the underlying pool is disposed before performing any operations
-	/// </summary>
-	private readonly void CheckDisposed()
-	{
-		if (Pool.IsDisposed) {
-			throw new ObjectDisposedException(nameof(PooledString));
-		}
-	}
-
-	/// <summary>
-	/// Internal mutate method to set part of the buffer. Note this doesn't actually mutate the PooledString itself, just the underlying pool.
-	/// </summary>
-	private readonly void SetAtPosition(int start, ReadOnlySpan<char> value)
-	{
-		CheckDisposed();
-
-		if (AllocationId == UnmanagedStringPool.EmptyStringAllocationId) {
-			throw new InvalidOperationException("Cannot mutate an empty string allocation");
-		}
-
-		// Get the current allocation info
-		var info = Pool.GetAllocationInfo(AllocationId);
-
-		// Check if the starting position is valid
-		if (start < 0) {
-			throw new ArgumentOutOfRangeException(nameof(start), "Start position cannot be negative");
-		}
-
-		// Check if the value will fit in the buffer
-		if (start + value.Length > info.LengthChars) {
-			throw new ArgumentOutOfRangeException(
-				nameof(value),
-				$"The provided value is too large to fit in the string at the specified position. Available space: {info.LengthChars - start}, required: {value.Length}");
-		}
-
-		// Copy the value to the target position
-		unsafe {
-			fixed (char* pChar = value) {
-				var dest = (void*)IntPtr.Add(info.Pointer, start * sizeof(char));
-				Buffer.MemoryCopy(pChar, dest, (info.LengthChars - start) * sizeof(char), value.Length * sizeof(char));
-			}
-		}
-	}
-
-	/// <summary>
-	/// Free the string back to the pool, if it is not empty
-	/// </summary>
-	/// <remarks>
-	/// <b>Warning:</b> This invalidates ALL copies of this PooledString, not just this instance.
-	/// See <see cref="Free"/> for details about copy behavior.
-	/// </remarks>
-	public void Dispose() => Free();
 }

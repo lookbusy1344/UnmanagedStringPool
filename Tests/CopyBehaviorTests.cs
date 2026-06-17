@@ -3,14 +3,14 @@ namespace LookBusy.Test;
 using Xunit;
 
 /// <summary>
-/// Tests for PooledString copy behavior and disposal semantics.
-/// These tests document and verify that PooledString copies share the same allocation,
-/// and disposing any copy invalidates all copies.
+///     Tests for PooledString copy behavior and disposal semantics.
+///     These tests document and verify that PooledString copies share the same allocation,
+///     and disposing any copy invalidates all copies.
 /// </summary>
 public class CopyBehaviorTests
 {
 	/// <summary>
-	/// Verify that copying a PooledString results in both instances sharing the same allocation ID
+	///     Verify that copying a PooledString results in both instances sharing the same allocation ID
 	/// </summary>
 	[Fact]
 	public void CopySharing_CopiedPooledStrings_ShareSameAllocationId()
@@ -28,7 +28,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Verify that disposing the original PooledString invalidates all copies
+	///     Verify that disposing the original PooledString invalidates all copies
 	/// </summary>
 	[Fact]
 	public void DisposalInvalidation_DisposingOriginal_InvalidatesAllCopies()
@@ -53,7 +53,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Verify that disposing a copy invalidates the original and all other copies
+	///     Verify that disposing a copy invalidates the original and all other copies
 	/// </summary>
 	[Fact]
 	public void DisposalInvalidation_DisposingCopy_InvalidatesOriginalAndAllCopies()
@@ -73,7 +73,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Verify that multiple disposals are safe (idempotent)
+	///     Verify that multiple disposals are safe (idempotent)
 	/// </summary>
 	[Fact]
 	public void MultipleDisposals_DisposingMultipleTimes_IsSafe()
@@ -86,10 +86,10 @@ public class CopyBehaviorTests
 		original.Dispose();
 
 		// Additional disposals should not throw
-		original.Dispose();  // Dispose original again
-		copy.Dispose();      // Dispose the copy
-		original.Free();     // Use Free() instead of Dispose()
-		copy.Free();         // Free the copy
+		original.Dispose(); // Dispose original again
+		copy.Dispose(); // Dispose the copy
+		original.Free(); // Use Free() instead of Dispose()
+		copy.Free(); // Free the copy
 
 		// All should still be invalid
 		_ = Assert.Throws<ArgumentException>(() => original.AsSpan());
@@ -97,7 +97,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Verify that PooledString has value semantics but shares allocation
+	///     Verify that PooledString has value semantics but shares allocation
 	/// </summary>
 	[Fact]
 	public void ValueSemantics_StructCopies_MaintainValueSemantics()
@@ -116,12 +116,12 @@ public class CopyBehaviorTests
 		var str3 = str1.Insert(0, "Testing ");
 		Assert.NotEqual(str1.AllocationId, str3.AllocationId);
 		Assert.Equal("Testing Value Semantics", str3.ToString());
-		Assert.Equal("Value Semantics", str1.ToString());  // Original unchanged
-		Assert.Equal("Value Semantics", str2.ToString());  // Copy unchanged
+		Assert.Equal("Value Semantics", str1.ToString()); // Original unchanged
+		Assert.Equal("Value Semantics", str2.ToString()); // Copy unchanged
 	}
 
 	/// <summary>
-	/// Test copy behavior with empty strings
+	///     Test copy behavior with empty strings
 	/// </summary>
 	[Fact]
 	public void EmptyStrings_CopyingEmptyString_BehavesCorrectly()
@@ -136,7 +136,7 @@ public class CopyBehaviorTests
 
 		// Disposal should be safe
 		empty1.Dispose();
-		empty2.Dispose();  // Should not throw
+		empty2.Dispose(); // Should not throw
 
 		// Empty strings don't have actual allocations to invalidate
 		// But after pool disposal, operations requiring the pool will fail
@@ -146,7 +146,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Test that operations creating new PooledStrings don't affect copies of the original
+	///     Test that operations creating new PooledStrings don't affect copies of the original
 	/// </summary>
 	[Fact]
 	public void Operations_CreatingNewPooledStrings_DontAffectOriginalCopies()
@@ -175,7 +175,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Test copy behavior across using blocks
+	///     Test copy behavior across using blocks
 	/// </summary>
 	[Fact]
 	public void UsingBlocks_CopyAcrossUsingBlocks_InvalidatesCorrectly()
@@ -193,7 +193,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Test that Free() and Dispose() have identical behavior regarding copies
+	///     Test that Free() and Dispose() have identical behavior regarding copies
 	/// </summary>
 	[Fact]
 	public void FreeVsDispose_BothMethods_HaveSameCopyInvalidationBehavior()
@@ -216,7 +216,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Verify behavior when copying between different variables and collections
+	///     Verify behavior when copying between different variables and collections
 	/// </summary>
 	[Fact]
 	public void Collections_StoringCopiesInCollections_ShareAllocation()
@@ -227,10 +227,7 @@ public class CopyBehaviorTests
 		// Store in various collections
 		var list = new List<PooledString> { original, original };
 		var array = new[] { original, original };
-		var dict = new Dictionary<int, PooledString> {
-			[0] = original,
-			[1] = original
-		};
+		var dict = new Dictionary<int, PooledString> { [0] = original, [1] = original };
 
 		// All should share the same allocation
 		Assert.All(list, ps => Assert.Equal(original.AllocationId, ps.AllocationId));
@@ -246,7 +243,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Document that assignment creates a copy that shares allocation
+	///     Document that assignment creates a copy that shares allocation
 	/// </summary>
 	[Fact]
 	public void Assignment_SimpleAssignment_CreatesCopyWithSharedAllocation()
@@ -257,7 +254,7 @@ public class CopyBehaviorTests
 
 		// Assignment copies the struct
 		var originalAId = a.AllocationId;
-		a = b;  // Now a is a copy of b
+		a = b; // Now a is a copy of b
 
 		// a now shares b's allocation
 		Assert.Equal(b.AllocationId, a.AllocationId);
@@ -273,7 +270,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Test that Duplicate creates an independent copy with a different allocation ID
+	///     Test that Duplicate creates an independent copy with a different allocation ID
 	/// </summary>
 	[Fact]
 	public void Duplicate_CreatesIndependentCopy_WithDifferentAllocationId()
@@ -292,7 +289,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Test that disposing a cloned string doesn't affect the original
+	///     Test that disposing a cloned string doesn't affect the original
 	/// </summary>
 	[Fact]
 	public void Duplicate_DisposingDuplicate_DoesNotAffectOriginal()
@@ -312,7 +309,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Test that disposing the original doesn't affect the clone
+	///     Test that disposing the original doesn't affect the clone
 	/// </summary>
 	[Fact]
 	public void Duplicate_DisposingOriginal_DoesNotAffectDuplicate()
@@ -332,7 +329,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Test cloning empty strings
+	///     Test cloning empty strings
 	/// </summary>
 	[Fact]
 	public void Duplicate_EmptyString_ReturnsEmptyString()
@@ -349,7 +346,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Test that cloning creates truly independent strings
+	///     Test that cloning creates truly independent strings
 	/// </summary>
 	[Fact]
 	public void Duplicate_MultipleDuplicates_AllIndependent()
@@ -358,7 +355,7 @@ public class CopyBehaviorTests
 		var original = pool.Allocate("Multi Duplicate Test");
 		var clone1 = original.Duplicate();
 		var clone2 = original.Duplicate();
-		var clone3 = clone1.Duplicate();  // Duplicate of a clone
+		var clone3 = clone1.Duplicate(); // Duplicate of a clone
 
 		// All should have the same content
 		Assert.Equal("Multi Duplicate Test", original.ToString());
@@ -383,7 +380,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Test Duplicate vs assignment behavior comparison
+	///     Test Duplicate vs assignment behavior comparison
 	/// </summary>
 	[Fact]
 	public void Duplicate_VsAssignment_DifferentBehavior()
@@ -410,7 +407,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Test that Duplicate throws when pool is disposed
+	///     Test that Duplicate throws when pool is disposed
 	/// </summary>
 	[Fact]
 	public void Duplicate_DisposedPool_ThrowsObjectDisposedException()
@@ -426,7 +423,7 @@ public class CopyBehaviorTests
 	}
 
 	/// <summary>
-	/// Test Duplicate with large strings
+	///     Test Duplicate with large strings
 	/// </summary>
 	[Fact]
 	public void Duplicate_LargeString_WorksCorrectly()

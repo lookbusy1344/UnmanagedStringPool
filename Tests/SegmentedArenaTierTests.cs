@@ -1,14 +1,12 @@
 namespace LookBusy.Test;
 
-using System;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using LookBusy;
 using Xunit;
 
 public sealed class SegmentedArenaTierTests : IDisposable
 {
-	private readonly SegmentedArenaTier tier = new(segmentBytes: 4096);
+	private readonly SegmentedArenaTier tier = new(4096);
 
 	public void Dispose()
 	{
@@ -19,7 +17,7 @@ public sealed class SegmentedArenaTierTests : IDisposable
 	[Fact]
 	public void Allocate_First_UsesInitialSegment()
 	{
-		var ptr = tier.Allocate(byteCount: 512, out var segment, out _);
+		var ptr = tier.Allocate(512, out var segment, out _);
 		Assert.NotEqual(IntPtr.Zero, ptr);
 		Assert.NotNull(segment);
 		Assert.Equal(1, tier.SegmentCount);
@@ -31,6 +29,7 @@ public sealed class SegmentedArenaTierTests : IDisposable
 		for (var i = 0; i < 10; ++i) {
 			_ = tier.Allocate(1024, out _, out _);
 		}
+
 		Assert.True(tier.SegmentCount >= 2);
 	}
 
@@ -45,7 +44,7 @@ public sealed class SegmentedArenaTierTests : IDisposable
 	[Fact]
 	public void Allocate_OversizedUnalignedRequest_CreatesAlignedCapacitySegment()
 	{
-		using var customTier = new SegmentedArenaTier(segmentBytes: 16);
+		using var customTier = new SegmentedArenaTier(16);
 
 		_ = customTier.Allocate(17, out var seg, out var allocatedBytes);
 
@@ -57,7 +56,7 @@ public sealed class SegmentedArenaTierTests : IDisposable
 	[Fact]
 	public void Allocate_UnalignedOversizedRequest_ReturnsNonZeroPointer()
 	{
-		using var customTier = new SegmentedArenaTier(segmentBytes: 16);
+		using var customTier = new SegmentedArenaTier(16);
 
 		var ptr = customTier.Allocate(17, out var seg, out var allocatedBytes);
 
@@ -81,6 +80,7 @@ public sealed class SegmentedArenaTierTests : IDisposable
 	{
 		var ptr1 = tier.Allocate(1024, out var s1, out _);
 		for (var i = 0; i < 10; ++i) { _ = tier.Allocate(1024, out _, out _); }
+
 		var found = tier.LocateSegmentByPointer(ptr1);
 		Assert.Same(s1, found);
 	}
@@ -88,11 +88,11 @@ public sealed class SegmentedArenaTierTests : IDisposable
 	[Fact]
 	public void Reserve_TotalBytesOverflow_UsesLongArithmetic()
 	{
-		var customTier = new SegmentedArenaTier(segmentBytes: 16);
+		var customTier = new SegmentedArenaTier(16);
 		try {
 			var segmentsField = typeof(SegmentedArenaTier).GetField("segments", BindingFlags.Instance | BindingFlags.NonPublic);
 			Assert.NotNull(segmentsField);
-			var segments = (System.Collections.Generic.List<SegmentedArenaSegment>)segmentsField!.GetValue(customTier)!;
+			var segments = (List<SegmentedArenaSegment>)segmentsField!.GetValue(customTier)!;
 			segments.Clear();
 			segments.Add(CreateFakeSegment(int.MaxValue - 8));
 			segments.Add(CreateFakeSegment(16));

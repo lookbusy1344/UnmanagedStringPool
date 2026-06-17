@@ -1,9 +1,7 @@
 namespace LookBusy.Test;
 
-using System;
 using System.Runtime;
-using System.Threading;
-using LookBusy;
+using System.Runtime.CompilerServices;
 using Xunit;
 
 public class FinalizerBehaviorTests
@@ -187,7 +185,7 @@ public class FinalizerBehaviorTests
 
 	#region Helper Methods
 
-	[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+	[MethodImpl(MethodImplOptions.NoInlining)]
 	private static void CreateUndisposedPool()
 	{
 #pragma warning disable CA2000 // Dispose objects before losing scope - intentional for finalizer testing
@@ -201,7 +199,7 @@ public class FinalizerBehaviorTests
 #pragma warning restore CA2000
 	}
 
-	[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+	[MethodImpl(MethodImplOptions.NoInlining)]
 	private static void CreateUndisposedPoolWithAllocations()
 	{
 #pragma warning disable CA2000 // Dispose objects before losing scope
@@ -216,7 +214,7 @@ public class FinalizerBehaviorTests
 #pragma warning restore CA2000
 	}
 
-	[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+	[MethodImpl(MethodImplOptions.NoInlining)]
 	private static void CreateMultipleUndisposedPools(int count)
 	{
 #pragma warning disable CA2000 // Dispose objects before losing scope
@@ -228,7 +226,7 @@ public class FinalizerBehaviorTests
 #pragma warning restore CA2000
 	}
 
-	[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+	[MethodImpl(MethodImplOptions.NoInlining)]
 	private static void CreateFragmentedUndisposedPool()
 	{
 #pragma warning disable CA2000 // Dispose objects before losing scope
@@ -249,7 +247,7 @@ public class FinalizerBehaviorTests
 #pragma warning restore CA2000
 	}
 
-	[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+	[MethodImpl(MethodImplOptions.NoInlining)]
 	private static void CreatePoolsUnderMemoryPressure()
 	{
 		// Create memory pressure
@@ -268,7 +266,7 @@ public class FinalizerBehaviorTests
 		}
 	}
 
-	[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+	[MethodImpl(MethodImplOptions.NoInlining)]
 	private static WeakReference CreateTrackedUndisposedPool()
 	{
 #pragma warning disable CA2000 // Dispose objects before losing scope
@@ -280,7 +278,7 @@ public class FinalizerBehaviorTests
 #pragma warning restore CA2000
 	}
 
-	[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+	[MethodImpl(MethodImplOptions.NoInlining)]
 	private static void CreateLargeUndisposedPool(int sizeChars)
 	{
 #pragma warning disable CA2000 // Dispose objects before losing scope

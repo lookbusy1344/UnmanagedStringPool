@@ -1,12 +1,31 @@
 namespace LookBusy.Test;
 
-using System;
-using System.Collections.Generic;
-using LookBusy;
 using Xunit;
 
 public class UnmanagedStringPoolEdgeCaseTests
 {
+	#region Concurrent Access Edge Cases
+
+	[Fact]
+	public void MultiplePooledStrings_SamePool_IndependentOperations()
+	{
+		using var pool = new UnmanagedStringPool(2048);
+
+		var str1 = pool.Allocate("First");
+		var str2 = pool.Allocate("Second");
+
+		// Operations on one should not affect the other
+		var result1 = str1.Insert(0, "The ");
+		var result2 = str2.Replace("Second", "2nd");
+
+		Assert.Equal("The First", result1.ToString());
+		Assert.Equal("2nd", result2.ToString());
+		Assert.Equal("First", str1.ToString()); // Original unchanged
+		Assert.Equal("Second", str2.ToString()); // Original unchanged
+	}
+
+	#endregion
+
 	#region Constructor Edge Cases
 
 	[Fact]
@@ -501,28 +520,6 @@ public class UnmanagedStringPoolEdgeCaseTests
 		pool.FreeString(0);
 		pool.FreeString(1);
 		pool.FreeString(999999);
-	}
-
-	#endregion
-
-	#region Concurrent Access Edge Cases
-
-	[Fact]
-	public void MultiplePooledStrings_SamePool_IndependentOperations()
-	{
-		using var pool = new UnmanagedStringPool(2048);
-
-		var str1 = pool.Allocate("First");
-		var str2 = pool.Allocate("Second");
-
-		// Operations on one should not affect the other
-		var result1 = str1.Insert(0, "The ");
-		var result2 = str2.Replace("Second", "2nd");
-
-		Assert.Equal("The First", result1.ToString());
-		Assert.Equal("2nd", result2.ToString());
-		Assert.Equal("First", str1.ToString()); // Original unchanged
-		Assert.Equal("Second", str2.ToString()); // Original unchanged
 	}
 
 	#endregion

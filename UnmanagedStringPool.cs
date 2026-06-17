@@ -1,7 +1,5 @@
 namespace LookBusy;
 
-using System;
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -26,12 +24,11 @@ using System.Runtime.InteropServices;
  */
 
 /// <summary>
-/// Represents a pool for allocating unmanaged memory to store strings with automatic growth capability.
-///
-/// Thread Safety: This class follows standard .NET collection thread safety patterns:
-/// - Multiple threads can safely read concurrently (via PooledString operations)
-/// - Mutations (Allocate, Free, DefragmentAndGrowPool) require external synchronization
-/// - Disposing the pool while strings are in use is unsafe
+///     Represents a pool for allocating unmanaged memory to store strings with automatic growth capability.
+///     Thread Safety: This class follows standard .NET collection thread safety patterns:
+///     - Multiple threads can safely read concurrently (via PooledString operations)
+///     - Mutations (Allocate, Free, DefragmentAndGrowPool) require external synchronization
+///     - Disposing the pool while strings are in use is unsafe
 /// </summary>
 public sealed class UnmanagedStringPool : IDisposable
 {
@@ -42,40 +39,40 @@ public sealed class UnmanagedStringPool : IDisposable
 	private const double GrowthFactor = 1.5; // Default growth factor when pool needs to expand
 	private const int MinimumFreesBetweenCoalescing = 10; // Minimum number of free operations before coalescing
 
-	private IntPtr basePtr; // Base pointer to the unmanaged memory block
-	private int capacityBytes; // Total capacity in bytes of the pool
-	private int offsetFromBase; // Current offset from the base pointer, tracks how much space has been used
-	private uint lastAllocationId; // Last allocation ID used, starts at 0. Monotonically increasing
-	private int freeOperationsSinceLastCoalesce; // Track recent coalescing to avoid excessive operations
-	private int totalFreeBlocks; // Total number of free blocks in the pool
-	private int totalFreeBytes; // Running total of free bytes to avoid recalculation
+	// Central registry of allocated , keyed by allocation ID
+	private readonly Dictionary<uint, AllocationInfo> allocations = new(DefaultCollectionSize);
 
 	// Index free blocks by size for faster allocation, keyed by block size
 	private readonly SortedList<int, List<FreeBlock>> freeBlocksBySize = new(DefaultCollectionSize);
 
-	// Central registry of allocated , keyed by allocation ID
-	private readonly Dictionary<uint, AllocationInfo> allocations = new(DefaultCollectionSize);
+	private IntPtr basePtr; // Base pointer to the unmanaged memory block
+	private int capacityBytes; // Total capacity in bytes of the pool
+	private int freeOperationsSinceLastCoalesce; // Track recent coalescing to avoid excessive operations
+	private uint lastAllocationId; // Last allocation ID used, starts at 0. Monotonically increasing
+	private int offsetFromBase; // Current offset from the base pointer, tracks how much space has been used
+	private int totalFreeBlocks; // Total number of free blocks in the pool
+	private int totalFreeBytes; // Running total of free bytes to avoid recalculation
 
 	/// <summary>
-	/// Information about an allocated string. OffsetBytes is a convenience field, for when the block is freed. 16 bytes total
+	///     Information about an allocated string. OffsetBytes is a convenience field, for when the block is freed. 16 bytes total
 	/// </summary>
 	internal readonly record struct AllocationInfo(IntPtr Pointer, int LengthChars, int OffsetBytes)
 	{
 		/// <summary>
-		/// Just to aid debugging, this is an internal struct and not intended for public use
+		///     Just to aid debugging, this is an internal struct and not intended for public use
 		/// </summary>
 		public override unsafe string ToString() => new((char*)Pointer, 0, LengthChars);
 	}
 
 	/// <summary>
-	/// Information about a free block in the pool, 8 bytes total.
+	///     Information about a free block in the pool, 8 bytes total.
 	/// </summary>
 	private readonly record struct FreeBlock(int OffsetFromBase, int SizeBytes);
 
 	#region Public API
 
 	/// <summary>
-	/// Creates a new string pool with the specified initial capacity
+	///     Creates a new string pool with the specified initial capacity
 	/// </summary>
 	/// <param name="initialCapacityChars">Initial capacity in characters</param>
 	/// <param name="allowGrowth">Whether to allow the pool to grow automatically when needed</param>
@@ -92,24 +89,24 @@ public sealed class UnmanagedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Gets the amount of free space remaining in the pool in chars
+	///     Gets the amount of free space remaining in the pool in chars
 	/// </summary>
 	public int FreeSpaceChars => (capacityBytes - offsetFromBase + totalFreeBytes) / sizeof(char);
 
 	/// <summary>
-	/// Gets the number of characters that can fit in the remaining end block
+	///     Gets the number of characters that can fit in the remaining end block
 	/// </summary>
 	public int EndBlockSizeChars => (capacityBytes - offsetFromBase) / sizeof(char);
 
 	/// <summary>
-	/// Gets the number of active string allocations in the pool
+	///     Gets the number of active string allocations in the pool
 	/// </summary>
 	public int ActiveAllocations => allocations.Count;
 
 	/// <summary>
-	/// Gets the current fragmentation percentage of the pool (0-100)
-	/// Fragmentation measures how scattered the free space is, not just the amount of free space.
-	/// 0% = no fragmentation (contiguous free space), 100% = maximum fragmentation (many tiny scattered blocks)
+	///     Gets the current fragmentation percentage of the pool (0-100)
+	///     Fragmentation measures how scattered the free space is, not just the amount of free space.
+	///     0% = no fragmentation (contiguous free space), 100% = maximum fragmentation (many tiny scattered blocks)
 	/// </summary>
 	public double FragmentationPercentage
 	{
@@ -132,12 +129,12 @@ public sealed class UnmanagedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Gets or sets whether the pool is allowed to grow automatically when needed
+	///     Gets or sets whether the pool is allowed to grow automatically when needed
 	/// </summary>
 	public bool AllowGrowth { get; set; }
 
 	/// <summary>
-	/// Allocates a string of the specified length from the unmanaged string pool, and populate with the given ReadOnlySpan
+	///     Allocates a string of the specified length from the unmanaged string pool, and populate with the given ReadOnlySpan
 	/// </summary>
 	public PooledString Allocate(ReadOnlySpan<char> value)
 	{
@@ -166,7 +163,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Grows the pool safely by allocating a new buffer and copying only active allocations
+	///     Grows the pool safely by allocating a new buffer and copying only active allocations
 	/// </summary>
 	public void DefragmentAndGrowPool(int additionalBytes)
 	{
@@ -217,8 +214,8 @@ public sealed class UnmanagedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Diagnostic: Returns the entire buffer as a string, up to the last allocated character.
-	/// This includes all bytes from the start of the pool up to offsetFromBase.
+	///     Diagnostic: Returns the entire buffer as a string, up to the last allocated character.
+	///     This includes all bytes from the start of the pool up to offsetFromBase.
 	/// </summary>
 	public string DumpBufferAsString()
 	{
@@ -229,9 +226,9 @@ public sealed class UnmanagedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Clears all allocated strings from the pool and resets internal data structures.
-	/// The allocation ID counter is NOT reset, ensuring that any existing PooledString instances
-	/// become invalid and cannot be used after this operation.
+	///     Clears all allocated strings from the pool and resets internal data structures.
+	///     The allocation ID counter is NOT reset, ensuring that any existing PooledString instances
+	///     become invalid and cannot be used after this operation.
 	/// </summary>
 	public void Clear()
 	{
@@ -267,7 +264,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	#region Friend API for interaction with PooledString, not for public use
 
 	/// <summary>
-	/// Allocates a string of the specified length from the unmanaged string pool. Leaves it uninitialized
+	///     Allocates a string of the specified length from the unmanaged string pool. Leaves it uninitialized
 	/// </summary>
 	internal PooledString Allocate(int lengthChars)
 	{
@@ -319,7 +316,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Get allocation info for a valid allocation ID
+	///     Get allocation info for a valid allocation ID
 	/// </summary>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	internal AllocationInfo GetAllocationInfo(uint id)
@@ -334,7 +331,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Mark a string's memory as free for reuse
+	///     Mark a string's memory as free for reuse
 	/// </summary>
 	internal void FreeString(uint id)
 	{
@@ -368,7 +365,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Create an empty PooledString in this pool. Requires a pool so we know where to add if insertion occurs
+	///     Create an empty PooledString in this pool. Requires a pool so we know where to add if insertion occurs
 	/// </summary>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	internal PooledString CreateEmptyString()
@@ -382,7 +379,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	#region Private methods
 
 	/// <summary>
-	/// Align to 8 bytes for optimal memory usage while maintaining alignment
+	///     Align to 8 bytes for optimal memory usage while maintaining alignment
 	/// </summary>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	private static int AlignSize(int sizeBytes)
@@ -392,7 +389,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Register an allocation in the collection
+	///     Register an allocation in the collection
 	/// </summary>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	private PooledString RegisterAllocation(IntPtr ptr, int lengthChars, int offset)
@@ -409,7 +406,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Find a suitable free block that can accommodate the requested size using binary search
+	///     Find a suitable free block that can accommodate the requested size using binary search
 	/// </summary>
 	/// <returns>True if a suitable block was found</returns>
 	private bool FindSuitableFreeBlock(int requiredSize, out FreeBlock block)
@@ -432,7 +429,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Find the first index in freeBlocksBySize where the key is >= requiredSize
+	///     Find the first index in freeBlocksBySize where the key is >= requiredSize
 	/// </summary>
 	private int FindFirstSizeIndex(int requiredSize)
 	{
@@ -455,7 +452,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Add a free block to the size-indexed collection
+	///     Add a free block to the size-indexed collection
 	/// </summary>
 	private void AddFreeBlock(FreeBlock block)
 	{
@@ -479,7 +476,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Remove a specific free block from the size-indexed collection
+	///     Remove a specific free block from the size-indexed collection
 	/// </summary>
 	private void RemoveFreeBlock(FreeBlock block)
 	{
@@ -502,7 +499,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	}
 
 	/// <summary>
-	/// Combine adjacent free blocks to reduce fragmentation
+	///     Combine adjacent free blocks to reduce fragmentation
 	/// </summary>
 	private void CoalesceFreeBlocks()
 	{
@@ -558,12 +555,12 @@ public sealed class UnmanagedStringPool : IDisposable
 	#region IDisposable and finalizer
 
 	/// <summary>
-	/// Gets whether this pool has been disposed
+	///     Gets whether this pool has been disposed
 	/// </summary>
 	internal bool IsDisposed { get; private set; }
 
 	/// <summary>
-	/// Disposes the pool and invalidates all associated PooledStrings
+	///     Disposes the pool and invalidates all associated PooledStrings
 	/// </summary>
 	public void Dispose()
 	{

@@ -1,7 +1,5 @@
 namespace LookBusy.Test;
 
-using System;
-using LookBusy;
 using Xunit;
 
 public sealed class IntegerOverflowTests : IDisposable
@@ -15,6 +13,32 @@ public sealed class IntegerOverflowTests : IDisposable
 		pool?.Dispose();
 		GC.SuppressFinalize(this);
 	}
+
+	#region Binary Search Overflow Tests
+
+	[Fact]
+	public void BinarySearch_IndexCalculation_DoesNotOverflow()
+	{
+		// Fill pool with many allocations to stress binary search in free block management
+		var strings = new PooledString[100];
+
+		for (var i = 0; i < strings.Length; ++i) {
+			strings[i] = pool.Allocate($"String {i}");
+		}
+
+		// Free every other string to create many free blocks
+		for (var i = 0; i < strings.Length; i += 2) {
+			strings[i].Free();
+		}
+
+		// Allocate new strings - this will exercise the binary search in FindSuitableFreeBlock
+		for (var i = 0; i < 10; ++i) {
+			var newStr = pool.Allocate($"New {i}");
+			Assert.Equal($"New {i}", newStr.ToString());
+		}
+	}
+
+	#endregion
 
 	#region Constructor Overflow Tests
 
@@ -345,32 +369,6 @@ public sealed class IntegerOverflowTests : IDisposable
 			}
 
 			Assert.Equal("PREFIX" + testStr, result.ToString());
-		}
-	}
-
-	#endregion
-
-	#region Binary Search Overflow Tests
-
-	[Fact]
-	public void BinarySearch_IndexCalculation_DoesNotOverflow()
-	{
-		// Fill pool with many allocations to stress binary search in free block management
-		var strings = new PooledString[100];
-
-		for (var i = 0; i < strings.Length; ++i) {
-			strings[i] = pool.Allocate($"String {i}");
-		}
-
-		// Free every other string to create many free blocks
-		for (var i = 0; i < strings.Length; i += 2) {
-			strings[i].Free();
-		}
-
-		// Allocate new strings - this will exercise the binary search in FindSuitableFreeBlock
-		for (var i = 0; i < 10; ++i) {
-			var newStr = pool.Allocate($"New {i}");
-			Assert.Equal($"New {i}", newStr.ToString());
 		}
 	}
 

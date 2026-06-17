@@ -1,9 +1,5 @@
 namespace LookBusy.Test;
 
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Xunit;
 
 public sealed class ClearMethodTests : IDisposable
@@ -17,6 +13,42 @@ public sealed class ClearMethodTests : IDisposable
 		pool?.Dispose();
 		GC.SuppressFinalize(this);
 	}
+
+	#region Concurrent Access After Clear
+
+	[Fact]
+	public async Task Clear_InvalidatesStringsAcrossThreadsAsync()
+	{
+		// Arrange
+		var str = pool.Allocate("Shared string");
+		var clearExecuted = false;
+		var exceptionThrown = false;
+
+		// Act - access string from another thread after clear
+		var task = Task.Run(() => {
+			// Wait for clear to be executed
+			while (!clearExecuted) {
+				_ = Thread.Yield();
+			}
+
+			try {
+				_ = str.ToString(); // Should throw
+			}
+			catch (ArgumentException) {
+				exceptionThrown = true;
+			}
+		});
+
+		pool.Clear();
+		clearExecuted = true;
+
+		await task;
+
+		// Assert
+		Assert.True(exceptionThrown, "Expected ArgumentException when accessing cleared string from another thread");
+	}
+
+	#endregion
 
 	#region Basic Clear Functionality
 
@@ -98,7 +130,7 @@ public sealed class ClearMethodTests : IDisposable
 		_ = Assert.Throws<ArgumentException>(() => str1.Equals(str2));
 
 		// Object.Equals doesn't throw, it just returns false
-		Assert.False(str1.Equals((object)"Test"));
+		Assert.False(str1.Equals("Test"));
 	}
 
 	[Fact]
@@ -313,42 +345,6 @@ public sealed class ClearMethodTests : IDisposable
 
 		// Act & Assert
 		_ = Assert.Throws<ObjectDisposedException>(() => tempPool.Clear());
-	}
-
-	#endregion
-
-	#region Concurrent Access After Clear
-
-	[Fact]
-	public async Task Clear_InvalidatesStringsAcrossThreadsAsync()
-	{
-		// Arrange
-		var str = pool.Allocate("Shared string");
-		var clearExecuted = false;
-		var exceptionThrown = false;
-
-		// Act - access string from another thread after clear
-		var task = Task.Run(() => {
-			// Wait for clear to be executed
-			while (!clearExecuted) {
-				_ = Thread.Yield();
-			}
-
-			try {
-				_ = str.ToString(); // Should throw
-			}
-			catch (ArgumentException) {
-				exceptionThrown = true;
-			}
-		});
-
-		pool.Clear();
-		clearExecuted = true;
-
-		await task;
-
-		// Assert
-		Assert.True(exceptionThrown, "Expected ArgumentException when accessing cleared string from another thread");
 	}
 
 	#endregion

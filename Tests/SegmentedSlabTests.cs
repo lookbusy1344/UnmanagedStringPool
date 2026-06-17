@@ -1,12 +1,10 @@
 namespace LookBusy.Test;
 
-using System;
-using LookBusy;
 using Xunit;
 
 public sealed class SegmentedSlabTests : IDisposable
 {
-	private readonly SegmentedSlab slab = new(sizeClass: 0, cellBytes: 16, cellCount: 8);
+	private readonly SegmentedSlab slab = new(0, 16, 8);
 
 	public void Dispose()
 	{
@@ -47,6 +45,7 @@ public sealed class SegmentedSlabTests : IDisposable
 		for (var i = 0; i < 8; ++i) {
 			Assert.True(slab.TryAllocateCell(out _));
 		}
+
 		Assert.True(slab.IsFull);
 		Assert.False(slab.TryAllocateCell(out _));
 	}
