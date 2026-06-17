@@ -1,6 +1,6 @@
 # New config, for command-line and ASP.NET apps, and UI combined
 # This keeps open-braces on same line for code blocks
-# 30 Jan 2026
+# 17 Jun 2026
 
 # Remove the line below if you want to inherit .editorconfig settings from higher directories
 root = true
@@ -341,3 +341,6 @@ roslynator_infinite_loop_style = while # for|while
 
 # Use pattern matching
 dotnet_diagnostic.rcs9001.severity = suggestion
+
+# Rider only - for multi-line arrays, collections, enums, etc
+trailing_comma_in_multiline_lists = true
