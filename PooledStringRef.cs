@@ -45,11 +45,23 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 
 	// ---- query methods ----
 
-	public int IndexOf(ReadOnlySpan<char> value, StringComparison c = StringComparison.Ordinal) =>
-		IsEmpty ? value.IsEmpty ? 0 : -1 : AsSpan().IndexOf(value, c);
+	public int IndexOf(ReadOnlySpan<char> value, StringComparison c = StringComparison.Ordinal)
+	{
+		if (IsEmpty) {
+			return value.IsEmpty ? 0 : -1;
+		}
 
-	public int LastIndexOf(ReadOnlySpan<char> value, StringComparison c = StringComparison.Ordinal) =>
-		IsEmpty ? value.IsEmpty ? 0 : -1 : AsSpan().LastIndexOf(value, c);
+		return AsSpan().IndexOf(value, c);
+	}
+
+	public int LastIndexOf(ReadOnlySpan<char> value, StringComparison c = StringComparison.Ordinal)
+	{
+		if (IsEmpty) {
+			return value.IsEmpty ? 0 : -1;
+		}
+
+		return AsSpan().LastIndexOf(value, c);
+	}
 
 	public bool StartsWith(ReadOnlySpan<char> value, StringComparison c = StringComparison.Ordinal) =>
 		IsEmpty ? value.IsEmpty : AsSpan().StartsWith(value, c);

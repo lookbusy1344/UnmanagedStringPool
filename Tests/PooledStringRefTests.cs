@@ -189,6 +189,8 @@ public sealed class PooledStringRefQueryTests : IDisposable
 		var e = PooledStringRef.Empty;
 		Assert.Equal(-1, e.IndexOf("x"));
 		Assert.Equal(0, e.IndexOf(""));
+		Assert.Equal(-1, e.LastIndexOf("x"));
+		Assert.Equal(0, e.LastIndexOf(""));
 		Assert.True(e.StartsWith(""));
 		Assert.False(e.StartsWith("x"));
 	}
