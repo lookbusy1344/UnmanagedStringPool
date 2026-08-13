@@ -26,24 +26,24 @@
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Roslynator.Analyzers" Version="4.15.0">
+        <PackageReference Include="Roslynator.Analyzers" Version="4.16.0">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
-        <PackageReference Include="System.IO.Hashing" Version="10.0.10"/>
+        <PackageReference Include="System.IO.Hashing" Version="10.0.11" />
     </ItemGroup>
 
     <ItemGroup>
-        <Compile Include="../PooledString.cs"/>
-        <Compile Include="../UnmanagedStringPool.cs"/>
-        <Compile Include="../SegmentedStringPool.cs"/>
-        <Compile Include="../PooledStringRef.cs"/>
-        <Compile Include="../SegmentedSlotEntry.cs"/>
-        <Compile Include="../SegmentedSlotTable.cs"/>
-        <Compile Include="../SegmentedSlab.cs"/>
-        <Compile Include="../SegmentedSlabTier.cs"/>
-        <Compile Include="../SegmentedArenaSegment.cs"/>
-        <Compile Include="../SegmentedArenaTier.cs"/>
+        <Compile Include="../PooledString.cs" />
+        <Compile Include="../UnmanagedStringPool.cs" />
+        <Compile Include="../SegmentedStringPool.cs" />
+        <Compile Include="../PooledStringRef.cs" />
+        <Compile Include="../SegmentedSlotEntry.cs" />
+        <Compile Include="../SegmentedSlotTable.cs" />
+        <Compile Include="../SegmentedSlab.cs" />
+        <Compile Include="../SegmentedSlabTier.cs" />
+        <Compile Include="../SegmentedArenaSegment.cs" />
+        <Compile Include="../SegmentedArenaTier.cs" />
     </ItemGroup>
 
 </Project>
