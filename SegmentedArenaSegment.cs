@@ -39,13 +39,13 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	public readonly IntPtr Buffer;
 	public readonly int Capacity;
 
-	private BinHeadArray binHeads;
-	private bool disposed;
-
 	// Set by SegmentedArenaTier when this segment was created to satisfy a single request
 	// larger than the default segment size. The normal allocation loop skips oversized segments
 	// so that small subsequent allocations don't mix into a dedicated large-string segment.
 	public bool IsOversized;
+
+	private BinHeadArray binHeads;
+	private bool disposed;
 
 	public SegmentedArenaSegment(int capacity)
 	{
@@ -101,7 +101,12 @@ internal sealed class SegmentedArenaSegment : IDisposable
 						// Split the block: the tail portion becomes a new free block in its own bin.
 						var tailOffset = head + size;
 						WriteHeader(tailOffset,
-							new() { SizeBytes = remainder, NextOffset = -1, PrevOffset = -1, BinIndex = BinIndexForSize(remainder) });
+							new() {
+								SizeBytes = remainder,
+								NextOffset = -1,
+								PrevOffset = -1,
+								BinIndex = BinIndexForSize(remainder),
+							});
 						LinkIntoBin(tailOffset);
 						actualBytes = size;
 					} else {
@@ -143,7 +148,12 @@ internal sealed class SegmentedArenaSegment : IDisposable
 		var size = NormalizeAllocationBytes(byteCount);
 		TryCoalesceForward(ref offset, ref size);
 		TryCoalesceBackward(ref offset, ref size);
-		WriteHeader(offset, new() { SizeBytes = size, NextOffset = -1, PrevOffset = -1, BinIndex = BinIndexForSize(size) });
+		WriteHeader(offset, new() {
+			SizeBytes = size,
+			NextOffset = -1,
+			PrevOffset = -1,
+			BinIndex = BinIndexForSize(size),
+		});
 		LinkIntoBin(offset);
 	}
 
@@ -182,7 +192,7 @@ internal sealed class SegmentedArenaSegment : IDisposable
 			return SegmentedConstants.MinArenaBlockBytes;
 		}
 
-		return checked((byteCount + (alignment - 1)) & ~(alignment - 1));
+		return checked(byteCount + (alignment - 1) & ~(alignment - 1));
 	}
 
 	// Maps block size to bin index via Log2(size) − 4.
@@ -218,7 +228,10 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	private void MarkFooterFree(int blockOffset, int blockSize)
 	{
 		var footerOffset = blockOffset + blockSize - Unsafe.SizeOf<SegmentedFreeBlockFooter>();
-		WriteFooter(footerOffset, new() { SizeBytes = blockSize, IsFree = 1 });
+		WriteFooter(footerOffset, new() {
+			SizeBytes = blockSize,
+			IsFree = 1,
+		});
 	}
 
 	// Clears the free flag in the boundary-tag footer when a block is allocated.
@@ -227,7 +240,10 @@ internal sealed class SegmentedArenaSegment : IDisposable
 	private void MarkFooterInUse(int blockOffset, int blockSize)
 	{
 		var footerOffset = blockOffset + blockSize - Unsafe.SizeOf<SegmentedFreeBlockFooter>();
-		WriteFooter(footerOffset, new() { SizeBytes = blockSize, IsFree = 0 });
+		WriteFooter(footerOffset, new() {
+			SizeBytes = blockSize,
+			IsFree = 0,
+		});
 	}
 
 	private void LinkIntoBin(int offset)

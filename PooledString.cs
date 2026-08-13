@@ -370,7 +370,7 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 			}
 		}
 
-		var newSize = span.Length + (sizeDiff * occurrences.Count);
+		var newSize = span.Length + sizeDiff * occurrences.Count;
 		if (newSize < 0) {
 			throw new ArgumentException("Replacement would result in invalid size");
 		}
@@ -474,4 +474,5 @@ public readonly record struct PooledString(UnmanagedStringPool Pool, uint Alloca
 	}
 
 	#endregion // public API
+
 }

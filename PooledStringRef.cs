@@ -149,7 +149,7 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 
 		// Upper bound on possible matches: source.Length / oldValue.Length + 1.
 		// Renting once upfront avoids the doubling churn (64→128→256…) of the old strategy.
-		var maxMatches = Math.Max(ReplaceInlineMatchCap, (source.Length / oldValue.Length) + 1);
+		var maxMatches = Math.Max(ReplaceInlineMatchCap, source.Length / oldValue.Length + 1);
 		Span<int> inlineMatches = stackalloc int[ReplaceInlineMatchCap];
 		var rentedMatches = maxMatches > ReplaceInlineMatchCap
 			? ArrayPool<int>.Shared.Rent(maxMatches)
@@ -181,7 +181,7 @@ public readonly struct PooledStringRef : IDisposable, IEquatable<PooledStringRef
 		try {
 			// checked: source.Length + matchCount*(delta) can overflow int when the replacement
 			// string is much larger than the old value and there are many matches.
-			var totalLength = checked(source.Length + (matchCount * (newValue.Length - oldValue.Length)));
+			var totalLength = checked(source.Length + matchCount * (newValue.Length - oldValue.Length));
 			var buffer = totalLength <= 256
 				? stackalloc char[totalLength]
 				: (rentedChars = ArrayPool<char>.Shared.Rent(totalLength)).AsSpan(0, totalLength);

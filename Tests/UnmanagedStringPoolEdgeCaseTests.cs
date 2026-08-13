@@ -4,6 +4,7 @@ using Xunit;
 
 public class UnmanagedStringPoolEdgeCaseTests
 {
+
 	#region Concurrent Access Edge Cases
 
 	[Fact]
@@ -523,4 +524,5 @@ public class UnmanagedStringPoolEdgeCaseTests
 	}
 
 	#endregion
+
 }

@@ -97,7 +97,7 @@ public sealed class SegmentedStringPool : IDisposable
 	///     and slab bitmap arrays; excludes GC object headers and framework list overhead.
 	/// </summary>
 	public long GetTotalBytesManaged() =>
-		(slots.Capacity * (long)Unsafe.SizeOf<SegmentedSlotEntry>()) + slabTier.GetManagedBitmapBytes();
+		slots.Capacity * (long)Unsafe.SizeOf<SegmentedSlotEntry>() + slabTier.GetManagedBitmapBytes();
 
 	/// <summary>
 	///     Copies <paramref name="value" /> into unmanaged memory and returns a <see cref="PooledStringRef" /> handle.
@@ -120,7 +120,7 @@ public sealed class SegmentedStringPool : IDisposable
 		}
 
 		// bit 0 of the raw pointer is guaranteed zero by 8-byte alignment, so OR-ing the tier tag is safe
-		var taggedPtr = new IntPtr((ptr.ToInt64() & SegmentedConstants.PtrMask) | (uint)tier);
+		var taggedPtr = new IntPtr(ptr.ToInt64() & SegmentedConstants.PtrMask | (uint)tier);
 		var (slotIndex, gen) = slots.Allocate(taggedPtr, length, owner, allocatedBytes);
 		return new(this, slotIndex, gen);
 	}
@@ -235,7 +235,7 @@ public sealed class SegmentedStringPool : IDisposable
 		}
 
 		ReserveSmall(chars / 2);
-		ReserveLarge(chars - (chars / 2));
+		ReserveLarge(chars - chars / 2);
 	}
 
 	private void Dispose(bool disposing)

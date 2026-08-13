@@ -225,9 +225,16 @@ public class CopyBehaviorTests
 		var original = pool.Allocate("Collection Test");
 
 		// Store in various collections
-		var list = new List<PooledString> { original, original };
-		var array = new[] { original, original };
-		var dict = new Dictionary<int, PooledString> { [0] = original, [1] = original };
+		var list = new List<PooledString> {
+			original, original,
+		};
+		var array = new[] {
+			original, original,
+		};
+		var dict = new Dictionary<int, PooledString> {
+			[0] = original,
+			[1] = original,
+		};
 
 		// All should share the same allocation
 		Assert.All(list, ps => Assert.Equal(original.AllocationId, ps.AllocationId));

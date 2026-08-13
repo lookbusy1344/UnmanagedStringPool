@@ -151,7 +151,7 @@ public sealed class SegmentedArenaTierTests : IDisposable
 	{
 		var segment = (SegmentedArenaSegment)RuntimeHelpers.GetUninitializedObject(typeof(SegmentedArenaSegment));
 		typeof(SegmentedArenaSegment).GetField("Capacity", BindingFlags.Instance | BindingFlags.Public)!
-			.SetValue(segment, capacity);
+									 .SetValue(segment, capacity);
 		return segment;
 	}
 }

@@ -52,7 +52,7 @@ internal struct SegmentedSlotEntry
 			return false;
 		}
 
-		bumpedGeneration = ((value + 1u) & SegmentedConstants.GenerationMask) | SegmentedConstants.HighBit;
+		bumpedGeneration = value + 1u & SegmentedConstants.GenerationMask | SegmentedConstants.HighBit;
 		return true;
 	}
 
@@ -64,7 +64,7 @@ internal struct SegmentedSlotEntry
 			return false;
 		}
 
-		bumpedGeneration = (value + 1u) & SegmentedConstants.GenerationMask;
+		bumpedGeneration = value + 1u & SegmentedConstants.GenerationMask;
 		return true;
 	}
 }

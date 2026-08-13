@@ -4,6 +4,7 @@ using Xunit;
 
 public class DisposalAndLifecycleTests
 {
+
 	#region Basic Disposal Tests
 
 	[Fact]
@@ -495,4 +496,5 @@ public class DisposalAndLifecycleTests
 	}
 
 	#endregion
+
 }

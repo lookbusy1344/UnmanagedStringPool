@@ -348,4 +348,5 @@ public sealed class ClearMethodTests : IDisposable
 	}
 
 	#endregion
+
 }

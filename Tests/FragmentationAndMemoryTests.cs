@@ -270,11 +270,11 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 			strings[i].Free();
 		}
 
-		var capacityBefore = pool.FreeSpaceChars + (pool.ActiveAllocations * 12); // Approximate
+		var capacityBefore = pool.FreeSpaceChars + pool.ActiveAllocations * 12; // Approximate
 
 		pool.DefragmentAndGrowPool(1000);
 
-		var capacityAfter = pool.FreeSpaceChars + (pool.ActiveAllocations * 12); // Approximate
+		var capacityAfter = pool.FreeSpaceChars + pool.ActiveAllocations * 12; // Approximate
 
 		Assert.True(capacityAfter > capacityBefore);
 		Assert.Equal(0.0, pool.FragmentationPercentage, 1); // Should be defragmented
@@ -311,7 +311,9 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 		var strings = new List<PooledString>();
 
 		// Allocate strings of various sizes to test alignment
-		var sizes = new[] { 1, 3, 7, 15, 31, 63 };
+		var sizes = new[] {
+			1, 3, 7, 15, 31, 63,
+		};
 
 		foreach (var size in sizes) {
 			var content = new string('X', size);
@@ -486,4 +488,5 @@ public sealed class FragmentationAndMemoryTests : IDisposable
 	}
 
 	#endregion
+
 }

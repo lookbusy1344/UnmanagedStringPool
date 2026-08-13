@@ -76,7 +76,9 @@ internal sealed class SegmentedArenaTier : IDisposable
 		}
 
 		var capacity = Math.Max(defaultSegmentBytes, normalizedByteCount);
-		var segment = new SegmentedArenaSegment(capacity) { IsOversized = isOversizedRequest };
+		var segment = new SegmentedArenaSegment(capacity) {
+			IsOversized = isOversizedRequest,
+		};
 		segments.Add(segment);
 		if (!segment.TryAllocate(normalizedByteCount, out var newPtr, out allocatedBytes)) {
 			throw new InvalidOperationException("Fresh arena segment could not satisfy the requested allocation");

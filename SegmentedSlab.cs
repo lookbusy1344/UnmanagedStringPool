@@ -11,11 +11,11 @@ using System.Runtime.InteropServices;
 /// </summary>
 internal sealed class SegmentedSlab : IDisposable
 {
-	private readonly ulong[] bitmap;
 	public readonly IntPtr Buffer;
+	public readonly int SizeClass;
+	private readonly ulong[] bitmap;
 	private readonly int cellBytes;
 	private readonly int cellCount;
-	public readonly int SizeClass;
 	private bool disposed;
 
 	public SegmentedSlab(int sizeClass, int cellBytes, int cellCount)
@@ -67,7 +67,7 @@ internal sealed class SegmentedSlab : IDisposable
 
 			// tzcnt finds the lowest set (free) bit; on x86 this is a single instruction.
 			var bit = BitOperations.TrailingZeroCount(word);
-			cellIndex = (w * 64) + bit;
+			cellIndex = w * 64 + bit;
 			if (cellIndex >= cellCount) {
 				break;
 			}
@@ -131,9 +131,9 @@ internal sealed class SegmentedSlab : IDisposable
 			bitmap[w] = ulong.MaxValue;
 		}
 
-		var excess = (bitmap.Length * 64) - cellCount;
+		var excess = bitmap.Length * 64 - cellCount;
 		if (excess > 0) {
-			bitmap[^1] &= (1UL << (64 - excess)) - 1UL;
+			bitmap[^1] &= (1UL << 64 - excess) - 1UL;
 		}
 	}
 

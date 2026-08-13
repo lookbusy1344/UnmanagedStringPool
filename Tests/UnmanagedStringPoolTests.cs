@@ -153,7 +153,7 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 		var str2 = pool.Allocate("Free this");
 		str2.Free();
 
-		var initialCapacity = pool.FreeSpaceChars + (pool.ActiveAllocations * "Keep this".Length);
+		var initialCapacity = pool.FreeSpaceChars + pool.ActiveAllocations * "Keep this".Length;
 
 		pool.DefragmentAndGrowPool(512);
 
@@ -356,4 +356,5 @@ public sealed class UnmanagedStringPoolTests : IDisposable
 	}
 
 	#endregion
+
 }

@@ -68,7 +68,7 @@ public sealed class IntegerOverflowTests : IDisposable
 	public void Constructor_CapacityByteOverflow_ThrowsOutOfMemoryOrArgumentException()
 	{
 		// When initialCapacityChars * sizeof(char) would overflow int
-		var oversizedCapacity = (int.MaxValue / sizeof(char)) + 1;
+		var oversizedCapacity = int.MaxValue / sizeof(char) + 1;
 
 		_ = Assert.ThrowsAny<Exception>(() => {
 			using var testPool = new UnmanagedStringPool(oversizedCapacity);
@@ -82,7 +82,7 @@ public sealed class IntegerOverflowTests : IDisposable
 	[Theory]
 	[InlineData(int.MaxValue)]
 	[InlineData(int.MaxValue / sizeof(char))]
-	[InlineData(((int.MaxValue - 8 + 1) / sizeof(char)) + 1)] // Just over the safe limit
+	[InlineData((int.MaxValue - 8 + 1) / sizeof(char) + 1)] // Just over the safe limit
 	public void Allocate_OversizedString_ThrowsArgumentOutOfRangeException(int lengthChars) =>
 		Assert.Throws<ArgumentOutOfRangeException>(() => pool.Allocate(lengthChars));
 
@@ -167,7 +167,9 @@ public sealed class IntegerOverflowTests : IDisposable
 	public void AlignSize_NearMaxValues_BehavesConsistently()
 	{
 		// Test values just under the overflow threshold
-		var testValues = new[] { int.MaxValue / 2, int.MaxValue / 4 };
+		var testValues = new[] {
+			int.MaxValue / 2, int.MaxValue / 4,
+		};
 
 		foreach (var lengthChars in testValues) {
 			// These should all throw due to memory constraints or overflow detection
@@ -356,7 +358,9 @@ public sealed class IntegerOverflowTests : IDisposable
 	public void BufferMemoryCopy_LengthCalculations_HandleBoundaries()
 	{
 		// Test memory copy operations with strings at various lengths
-		var testStrings = new[] { "", "A", "AB", "ABC", new string('X', 1000) };
+		var testStrings = new[] {
+			"", "A", "AB", "ABC", new string('X', 1000),
+		};
 
 		foreach (var testStr in testStrings) {
 			PooledString result;
@@ -417,4 +421,5 @@ public sealed class IntegerOverflowTests : IDisposable
 	}
 
 	#endregion
+
 }

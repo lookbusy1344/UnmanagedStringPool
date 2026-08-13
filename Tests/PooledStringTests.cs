@@ -536,8 +536,7 @@ public sealed class PooledStringTests : IDisposable
 	{
 		// Test with various string patterns
 		var testStrings = new[] {
-			"", "a", "Hello World", "The quick brown fox jumps over the lazy dog", "12345678901234567890", "Special chars: !@#$%^&*()",
-			"Unicode: 你好世界 🌍", "  spaces  at  various  positions  ", "\t\n\r", new string('x', 100),
+			"", "a", "Hello World", "The quick brown fox jumps over the lazy dog", "12345678901234567890", "Special chars: !@#$%^&*()", "Unicode: 你好世界 🌍", "  spaces  at  various  positions  ", "\t\n\r", new string('x', 100),
 		};
 
 		foreach (var testString in testStrings) {
@@ -734,9 +733,9 @@ public sealed class PooledStringTests : IDisposable
 	{
 		var original = pool.Allocate("Hello World");
 		var result = original
-			.Replace("World", "Beautiful World")
-			.Insert(0, "Say ")
-			.Replace("Say Hello", "Greet the");
+					 .Replace("World", "Beautiful World")
+					 .Insert(0, "Say ")
+					 .Replace("Say Hello", "Greet the");
 
 		Assert.Equal("Greet the Beautiful World", result.ToString());
 		Assert.Equal("Hello World", original.ToString()); // Original unchanged
@@ -747,12 +746,13 @@ public sealed class PooledStringTests : IDisposable
 	{
 		var original = pool.Allocate("The quick brown fox jumps over the lazy dog");
 		var result = original
-			.Replace("quick", "fast")
-			.Replace("brown", "red")
-			.Replace("lazy", "sleepy");
+					 .Replace("quick", "fast")
+					 .Replace("brown", "red")
+					 .Replace("lazy", "sleepy");
 
 		Assert.Equal("The fast red fox jumps over the sleepy dog", result.ToString());
 	}
 
 	#endregion
+
 }

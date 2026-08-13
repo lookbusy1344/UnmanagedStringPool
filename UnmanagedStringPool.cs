@@ -124,7 +124,7 @@ public sealed class UnmanagedStringPool : IDisposable
 
 			// Fragmentation = how much smaller our blocks are than ideal
 			// This gives 0% for 1 block, 50% for 2 blocks, 66% for 3 blocks, etc.
-			return (1.0 - (actualAvgSize / idealAvgSize)) * 100.0;
+			return (1.0 - actualAvgSize / idealAvgSize) * 100.0;
 		}
 	}
 
@@ -385,7 +385,7 @@ public sealed class UnmanagedStringPool : IDisposable
 	private static int AlignSize(int sizeBytes)
 	{
 		const int alignment = 8;
-		return sizeBytes < alignment ? alignment : (sizeBytes + (alignment - 1)) & ~(alignment - 1);
+		return sizeBytes < alignment ? alignment : sizeBytes + (alignment - 1) & ~(alignment - 1);
 	}
 
 	/// <summary>
@@ -440,7 +440,7 @@ public sealed class UnmanagedStringPool : IDisposable
 		// Binary search for the first key >= requiredSize
 		// Using optimized arithmetic to prevent overflow and improve performance
 		while (low < high) {
-			var mid = low + ((high - low) >> 1); // Overflow-safe and faster than division
+			var mid = low + (high - low >> 1); // Overflow-safe and faster than division
 			if (keys[mid] >= requiredSize) {
 				high = mid;
 			} else {
@@ -586,4 +586,5 @@ public sealed class UnmanagedStringPool : IDisposable
 	~UnmanagedStringPool() => Dispose(false);
 
 	#endregion
+
 }

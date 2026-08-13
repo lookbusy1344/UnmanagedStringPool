@@ -6,6 +6,7 @@ using Xunit;
 
 public class FinalizerBehaviorTests
 {
+
 	#region Finalizer Execution Tests
 
 	[Fact]
@@ -305,4 +306,5 @@ public class FinalizerBehaviorTests
 	}
 
 	#endregion
+
 }
