@@ -2,6 +2,23 @@
 
 .NET 10.0 unmanaged string pool reducing GC pressure. The primary implementation is `SegmentedStringPool`; `UnmanagedStringPool` is the older single-block implementation, retained for reference.
 
+## Version control (read first)
+
+Before the first VCS command, run `jj --ignore-working-copy root`. This may be a jj repo on one machine and plain Git on another.
+
+**IMPORTANT:** if it succeeds, use `jj` for all VCS commands, including `log`, `show`, `status` and `diff`. Do not run `git` on jj repos. The `gitStatus` snapshot in the session context is not a reason to use git.
+
+jj has no commit hooks. Run the pre-commit checks before `jj commit`, `jj describe` (when finalising a change) and `jj squash`.
+If a change touches only non-code files (`*.md`), skip the dotnet steps.
+
+Before `jj git push` or moving a shared bookmark, run `scripts/pre-push.sh`. By default it formats the tip (newest non-empty mutable revision) with `jj fix` (`scripts/format-stdin.sh`, whitespace rules), then runs restore, build, `dotnet format --verify-no-changes` and tests on it. `--full` formats every mutable revision in `::@` and checks each in its own checkout via `jj run`. `scripts/agent-pre-push-hook.sh` runs the tip check on every push command and blocks the push on failure. Claude Code (`.claude/settings.json`) and Codex (`.codex/hooks.json`) call it as a `PreToolUse` hook. The hook checks the tip of `@`, not the bookmark being pushed, so push only the bookmark you are working on: the one on `@-`, with an empty `@` above it. In a plain Git checkout it runs the same checks on the working tree without formatting it, and refuses uncommitted changes to tracked files so the checked tree is the pushed HEAD. `git push` triggers the same hook.
+
+Push only on explicit request. "Push this" means: if `@` is non-empty, `jj commit` it (after the pre-commit checks). Move the bookmark to `@-` with `jj bookmark set <name> -r @-`, then `jj git push --bookmark <name>`. Use the bookmark already on the stack; otherwise `main`. Never push any other bookmark. Do not use `jj git push -c`.
+
+## Personal information
+
+Exclude PII from every commit, commit message and bookmark name: real names, email addresses, usernames, machine paths such as `/Users/<name>/`, hostnames, tokens and credentials. Check the diff before `jj commit`, `jj describe` (finalising) and `git commit`.
+
 ## Build and Test
 
 ```bash
@@ -22,6 +39,8 @@ dotnet build
 dotnet format
 gtimeout 120 dotnet test
 ```
+
+`scripts/pre-commit.sh` runs the same sequence (format with `--verify-no-changes`) and skips it when no .NET source or build files changed. It reads changed files from `@` in jj, otherwise from `git diff HEAD`. In a plain Git checkout, install it as the hook: `ln -sf ../../scripts/pre-commit.sh .git/hooks/pre-commit`.
 
 ## Architecture
 

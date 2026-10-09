@@ -4,6 +4,10 @@
 
 A high-performance .NET 10 library for storing strings in unmanaged memory to eliminate GC pressure in string-intensive workloads.
 
+## Jujutsu
+
+This repo is managed with Jujutsu rather than Git. Try it out! https://docs.jj-vcs.dev/latest/
+
 ## Overview
 
 Two implementations are provided:
